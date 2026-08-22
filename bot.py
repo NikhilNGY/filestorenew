@@ -7,11 +7,10 @@ from pyrogram import Client
 from pyrogram.enums import ParseMode
 import sys
 from datetime import datetime
-from config import LOGGER, PORT, OWNER_ID, SHORT_URL, SHORT_API, SHORT_TUT
+from config import LOGGER, PORT, OWNER_ID
 from helper import MongoDB
 
 version = "v1.0.0"
-
 
 class Bot(Client):
     def __init__(self, session, workers, db, fsub, token, admins, messages, auto_del, db_uri, db_name, api_id, api_hash, protect, disable_btn):
@@ -40,8 +39,8 @@ class Bot(Client):
         self.reply_text = messages.get('REPLY', 'Do not send any useless message in the bot.')
         self.mongodb = MongoDB(db_uri, db_name)
         self.req_channels = []
-        self.db_channels = {}  # Initialize DB channels dictionary
-        self.primary_db_channel = db  # Set initial primary DB channel
+        self.db_channels = {}  
+        self.primary_db_channel = db  
     
     async def start(self):
         await super().start()
@@ -77,20 +76,17 @@ class Bot(Client):
             db_fsub_channels = await self.mongodb.get_fsub_channels()
             for channel_id_str, channel_data in db_fsub_channels.items():
                 channel_id = int(channel_id_str)
-                # Skip if already loaded from static config
                 if channel_id in self.fsub_dict:
                     continue
                 try:
                     chat = await self.get_chat(channel_id)
                     name = chat.title
-                    # Update name in case it changed
                     channel_data[0] = name
                     self.fsub_dict[channel_id] = channel_data
-                    if channel_data[2]:  # if request is True
+                    if channel_data[2]: 
                         self.req_channels.append(channel_id)
                 except Exception as e:
                     self.LOGGER(__name__, self.name).warning(f"Could not load dynamic fsub channel {channel_id}: {e}")
-                    # Remove invalid channel from database
                     await self.mongodb.remove_fsub_channel(channel_id)
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(f"Error loading dynamic fsub channels: {e}")
@@ -106,38 +102,19 @@ class Bot(Client):
             for channel_id_str, channel_data in db_channels_data.items():
                 channel_id = int(channel_id_str)
                 try:
-                    # Verify channel still exists and is accessible
                     chat = await self.get_chat(channel_id)
-                    # Update name in case it changed
                     channel_data['name'] = chat.title
                     self.db_channels[channel_id_str] = channel_data
                     
-                    # Set primary channel if marked as primary
                     if channel_data.get('is_primary', False):
                         self.primary_db_channel = channel_id
-                        self.db = channel_id  # Update current db reference
+                        self.db = channel_id
                         
                 except Exception as e:
                     self.LOGGER(__name__, self.name).warning(f"Could not load DB channel {channel_id}: {e}")
-                    # Remove invalid channel from database
                     await self.mongodb.remove_db_channel(channel_id)
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(f"Error loading DB channels: {e}")
-        
-        # Load shortner settings from database
-        try:
-            shortner_settings = await self.mongodb.get_shortner_settings()
-            self.short_url = shortner_settings.get('short_url', SHORT_URL)
-            self.short_api = shortner_settings.get('short_api', SHORT_API)
-            self.tutorial_link = shortner_settings.get('tutorial_link', SHORT_TUT)
-            self.shortner_enabled = shortner_settings.get('enabled', True)
-        except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Error loading shortner settings: {e}")
-            # Set defaults from config if loading fails
-            self.short_url = SHORT_URL
-            self.short_api = SHORT_API
-            self.tutorial_link = SHORT_TUT
-            self.shortner_enabled = True
         
         try:
             db_channel = await self.get_chat(self.db)
@@ -145,7 +122,6 @@ class Bot(Client):
             test = await self.send_message(chat_id = db_channel.id, text = "Testing Message by @ProYato")
             await test.delete()
             
-            # Log DB channels info
             self.LOGGER(__name__, self.name).info(f"Primary DB Channel: {self.primary_db_channel}")
             self.LOGGER(__name__, self.name).info(f"Total DB Channels: {len(self.db_channels)}")
         except Exception as e:
@@ -155,7 +131,6 @@ class Bot(Client):
             sys.exit()
         self.LOGGER(__name__, self.name).info("Bot Started!!")
         
-        # Send restart msge to owner
         try:
             restart_message = "<b>›› ʜᴇʏ sᴇɴᴘᴀɪ!!\n ɪ'ᴍ ᴀʟɪᴠᴇ ɴᴏᴡ 🍃...</b>"
             await self.send_message(chat_id=self.owner, text=restart_message)
@@ -164,14 +139,13 @@ class Bot(Client):
             self.LOGGER(__name__, self.name).warning(f"Failed to send restart notification to owner: {e}")
         
         self.username = usr_bot_me.username
+
     async def stop(self, *args):
         await super().stop()
         self.LOGGER(__name__, self.name).info("Bot stopped.")
-
 
 async def web_app():
     app = web.AppRunner(await web_server())
     await app.setup()
     bind_address = "0.0.0.0"
     await web.TCPSite(app, bind_address, PORT).start()
-    
