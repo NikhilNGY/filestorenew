@@ -1,12 +1,340 @@
+import secrets
+import string
+import asyncio
 from pyrogram import Client, filters
-from pyrogram.types import CallbackQuery, Message, InlineKeyboardButton, InlineKeyboardMarkup
-from config import MSG_EFFECT
-
-from pyrogram import Client, filters
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import (
+    CallbackQuery,
+    Message,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup
+)
+from pyrogram.enums import ParseMode
+from pyrogram.errors import FloodWait
 from pyrogram.errors.pyromod import ListenerTimeout
+from helper.helper_func import encode, get_message_id
+from config import LOGGER, MSG_EFFECT
 
-#===============================================================#
+
+# =============================================================== #
+#                MULTI-DATABASE (/datadb) MANAGER                 #
+# =============================================================== #
+
+def ensure_multidb_attrs(client):
+    """Ensure client has multi-database attributes initialized (Unlimited DBs)"""
+    if not hasattr(client, 'multi_db_enabled'):
+        client.multi_db_enabled = True
+    if not hasattr(client, 'db_urls'):
+        # Format: [{'id': 'unique_id', 'name': 'DB Name', 'url': 'mongodb+srv://...'}, ...]
+        client.db_urls = []
+
+def get_datadb_main_menu(client):
+    """Generate text and buttons for the main /datadb menu"""
+    ensure_multidb_attrs(client)
+    
+    on_text = "🟢 On ✓" if client.multi_db_enabled else "On"
+    off_text = "🔴 Off ✓" if not client.multi_db_enabled else "Off"
+    status_str = "ENABLED ✅" if client.multi_db_enabled else "DISABLED ❌"
+    
+    msg = f"""<blockquote>**✦ ᴍᴜʟᴛɪ ᴅᴀᴛᴀʙᴀsᴇ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ✦**</blockquote>
+
+›› **ᴍᴜʟᴛɪ ᴅᴀᴛᴀʙᴀsᴇ sᴛᴀᴛᴜs:** `{status_str}`
+›› **ᴛᴏᴛᴀʟ ᴄᴏɴғɪɢᴜʀᴇᴅ ᴜʀʟs:** `{len(client.db_urls)}` (Unlimited Supported)
+
+__Use the buttons below to manage your Multi-Database URLs and settings!__"""
+
+    reply_markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(on_text, callback_data="multidb_on"),
+            InlineKeyboardButton(off_text, callback_data="multidb_off")
+        ],
+        [
+            InlineKeyboardButton("➕ Add url", callback_data="multidb_add"),
+            InlineKeyboardButton("📋 url list", callback_data="multidb_list")
+        ],
+        [
+            InlineKeyboardButton("➖ Remove url", callback_data="multidb_rm_prompt"),
+            InlineKeyboardButton("🗑️ Remove All url", callback_data="multidb_rm_all")
+        ],
+        [
+            InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="settings")
+        ]
+    ])
+    return msg, reply_markup
+
+@Client.on_message(filters.command("datadb") & filters.private)
+async def datadb_command(client: Client, message: Message):
+    """Handle /datadb command to display the Multi Database interactive panel"""
+    if hasattr(client, 'admins') and message.from_user.id not in client.admins:
+        return await message.reply(getattr(client, 'reply_text', "**⚠️ You are not authorized to use this command!**"))
+    
+    msg, reply_markup = get_datadb_main_menu(client)
+    await message.reply_text(msg, reply_markup=reply_markup)
+
+@Client.on_callback_query(filters.regex("^datadb_menu$"))
+async def datadb_menu_cb(client: Client, query: CallbackQuery):
+    """Return to or refresh the main /datadb menu"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    msg, reply_markup = get_datadb_main_menu(client)
+    try:
+        await query.message.edit_text(msg, reply_markup=reply_markup)
+    except Exception:
+        pass
+
+@Client.on_callback_query(filters.regex("^multidb_(on|off)$"))
+async def multidb_toggle_cb(client: Client, query: CallbackQuery):
+    """Switch Multi Database On or Off"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    action = query.data.split("_")[1]
+    client.multi_db_enabled = (action == "on")
+    
+    # Persist in MongoDB if helper method is present
+    if hasattr(client.mongodb, 'set_multi_db_status'):
+        try:
+            await client.mongodb.set_multi_db_status(client.multi_db_enabled)
+        except Exception:
+            pass
+            
+    await query.answer(f"Multi Database turned {'ON ✅' if client.multi_db_enabled else 'OFF ❌'}")
+    await datadb_menu_cb(client, query)
+
+@Client.on_callback_query(filters.regex("^multidb_add$"))
+async def multidb_add_cb(client: Client, query: CallbackQuery):
+    """Add an unlimited number of Database URLs"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    await query.answer()
+    
+    try:
+        ask_info = await client.ask(
+            query.from_user.id,
+            "<blockquote>**➕ ᴀᴅᴅ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ**</blockquote>\n\n"
+            "Send your **Database Name** and **MongoDB URL** separated by a space in the next 60 seconds!\n\n"
+            "**Example:**\n`DB1 mongodb+srv://user:pass@cluster.mongodb.net/`\n\n"
+            "*(Or simply send the `mongodb+srv://...` URL directly and a name will be auto-assigned)*",
+            filters=filters.text,
+            timeout=60
+        )
+    except ListenerTimeout:
+        return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
+    except Exception:
+        return
+
+    text = ask_info.text.strip()
+    parts = text.split(maxsplit=1)
+    
+    if len(parts) == 1:
+        url = parts[0]
+        name = f"Database_{len(client.db_urls) + 1}"
+    else:
+        name, url = parts[0], parts[1].strip()
+
+    # Check if URL already exists
+    for entry in client.db_urls:
+        if entry['url'] == url:
+            return await ask_info.reply("**✗ This Database URL is already added in the list!**")
+
+    short_id = ''.join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+    new_db_entry = {
+        'id': short_id,
+        'name': name,
+        'url': url,
+        'added_by': query.from_user.id
+    }
+    client.db_urls.append(new_db_entry)
+
+    # Save to MongoDB if supported
+    if hasattr(client.mongodb, 'add_db_url'):
+        try:
+            await client.mongodb.add_db_url(new_db_entry)
+        except Exception:
+            pass
+
+    await datadb_menu_cb(client, query)
+    await ask_info.reply(
+        f"**✓ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ ᴀᴅᴅᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ!**\n\n"
+        f"›› **ɴᴀᴍᴇ:** `{name}`\n"
+        f"›› **ᴛᴏᴛᴀʟ ᴅʙs:** `{len(client.db_urls)}`"
+    )
+
+@Client.on_callback_query(filters.regex("^multidb_list$"))
+async def multidb_list_cb(client: Client, query: CallbackQuery):
+    """
+    Show list of all Database URLs in buttons:
+    Url name | remove url
+    Url name | remove url
+    """
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    if not client.db_urls:
+        return await query.answer("No Database URLs configured yet!", show_alert=True)
+
+    await query.answer()
+    buttons = []
+    
+    for idx, entry in enumerate(client.db_urls, 1):
+        db_id = entry['id']
+        db_name = entry['name']
+        buttons.append([
+            InlineKeyboardButton(f"{idx}. {db_name}", callback_data=f"multidb_info_{db_id}"),
+            InlineKeyboardButton("remove url", callback_data=f"multidb_del_{db_id}")
+        ])
+
+    buttons.append([InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ᴅᴀᴛᴀᴅʙ", callback_data="datadb_menu")])
+    
+    msg = f"""<blockquote>**📋 ᴄᴏɴғɪɢᴜʀᴇᴅ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ ʟɪsᴛ ({len(client.db_urls)})**</blockquote>
+
+Click on a **Url name** to view its details, or click **remove url** next to it to delete it immediately:"""
+
+    await query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup(buttons))
+
+@Client.on_callback_query(filters.regex("^multidb_info_(.+)$"))
+async def multidb_info_cb(client: Client, query: CallbackQuery):
+    """Show alert or details when clicking on Url name"""
+    ensure_multidb_attrs(client)
+    db_id = query.data.split("multidb_info_")[1]
+    
+    for entry in client.db_urls:
+        if entry['id'] == db_id:
+            url_str = entry['url']
+            masked_url = url_str[:22] + "..." + url_str[-12:] if len(url_str) > 38 else url_str
+            return await query.answer(
+                f"🗂 Name: {entry['name']}\n🔗 URL: {masked_url}",
+                show_alert=True
+            )
+    await query.answer("Database entry not found!", show_alert=True)
+
+@Client.on_callback_query(filters.regex("^multidb_del_(.+)$"))
+async def multidb_del_single_cb(client: Client, query: CallbackQuery):
+    """Remove a specific URL directly from the URL list row button"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    db_id = query.data.split("multidb_del_")[1]
+    
+    removed_entry = None
+    for entry in list(client.db_urls):
+        if entry['id'] == db_id:
+            removed_entry = entry
+            client.db_urls.remove(entry)
+            break
+
+    if not removed_entry:
+        return await query.answer("URL already removed!", show_alert=True)
+
+    if hasattr(client.mongodb, 'remove_db_url'):
+        try:
+            await client.mongodb.remove_db_url(db_id)
+        except Exception:
+            pass
+
+    await query.answer(f"Removed: {removed_entry['name']} ✅")
+    
+    # Refresh the list if items remain, otherwise return to main /datadb menu
+    if client.db_urls:
+        await multidb_list_cb(client, query)
+    else:
+        await datadb_menu_cb(client, query)
+
+@Client.on_callback_query(filters.regex("^multidb_rm_prompt$"))
+async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
+    """Remove a URL by sending its name or URL, or redirect to list"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    if not client.db_urls:
+        return await query.answer("No Database URLs to remove!", show_alert=True)
+
+    await query.answer()
+    try:
+        ask_rm = await client.ask(
+            query.from_user.id,
+            "<blockquote>**➖ ʀᴇᴍᴏᴠᴇ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ**</blockquote>\n\n"
+            "Send the **Url Name** or full **MongoDB URL** you want to remove in the next 60 seconds:\n\n"
+            "__Tip: You can also remove URLs with 1 click from the `url list` button!__",
+            filters=filters.text,
+            timeout=60
+        )
+    except ListenerTimeout:
+        return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
+    except Exception:
+        return
+
+    target = ask_rm.text.strip()
+    removed_entry = None
+    for entry in list(client.db_urls):
+        if entry['name'].lower() == target.lower() or entry['url'] == target or entry['id'] == target:
+            removed_entry = entry
+            client.db_urls.remove(entry)
+            break
+
+    if not removed_entry:
+        return await ask_rm.reply(f"**✗ Could not find any Database URL matching `{target}`!**")
+
+    if hasattr(client.mongodb, 'remove_db_url'):
+        try:
+            await client.mongodb.remove_db_url(removed_entry['id'])
+        except Exception:
+            pass
+
+    await datadb_menu_cb(client, query)
+    await ask_rm.reply(f"**✓ Successfully removed Database URL:** `{removed_entry['name']}`")
+
+@Client.on_callback_query(filters.regex("^multidb_rm_all$"))
+async def multidb_rm_all_cb(client: Client, query: CallbackQuery):
+    """Ask confirmation before removing all Database URLs"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    if not client.db_urls:
+        return await query.answer("Database URL list is already empty!", show_alert=True)
+
+    await query.answer()
+    markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Yes, Remove All", callback_data="multidb_confirm_rm_all"),
+            InlineKeyboardButton("❌ Cancel", callback_data="datadb_menu")
+        ]
+    ])
+    await query.message.edit_text(
+        f"**⚠️ Are you sure you want to remove ALL ({len(client.db_urls)}) Database URLs?**\n\n"
+        "__This action will clear all configured database URLs!__",
+        reply_markup=markup
+    )
+
+@Client.on_callback_query(filters.regex("^multidb_confirm_rm_all$"))
+async def multidb_confirm_rm_all_cb(client: Client, query: CallbackQuery):
+    """Execute removal of all Database URLs"""
+    if hasattr(client, 'admins') and query.from_user.id not in client.admins:
+        return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
+    
+    ensure_multidb_attrs(client)
+    client.db_urls.clear()
+
+    if hasattr(client.mongodb, 'clear_all_db_urls'):
+        try:
+            await client.mongodb.clear_all_db_urls()
+        except Exception:
+            pass
+
+    await query.answer("✅ All Database URLs have been removed!", show_alert=True)
+    await datadb_menu_cb(client, query)
+
+
+# =============================================================== #
+#                DB CHANNELS & GENERAL COMMANDS (others.py)       #
+# =============================================================== #
 
 @Client.on_message(filters.command('db') & filters.private)
 async def db_channels_command(client: Client, message: Message):
@@ -14,7 +342,6 @@ async def db_channels_command(client: Client, message: Message):
     if message.from_user.id not in client.admins:
         return await message.reply(client.reply_text)
     
-    # Show current DB channels status
     db_channels = getattr(client, 'db_channels', {})
     primary_db = getattr(client, 'primary_db_channel', client.db)
     
@@ -51,15 +378,10 @@ __ᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏ
     
     await message.reply(msg, reply_markup=reply_markup)
 
-#===============================================================#
-# NOTE: Callback handlers for add_db_channel, rm_db_channel, set_primary_db, and toggle_db_status
-# are implemented in settings.py to avoid conflicts. Only direct commands are handled here.
-#===============================================================#
-
 @Client.on_callback_query(filters.regex("^db_details$"))
 async def db_details(client, query):
     """Show detailed information about DB channels"""
-    if not query.from_user.id in client.admins:
+    if query.from_user.id not in client.admins:
         return await query.answer('✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!', show_alert=True)
     
     await query.answer()
@@ -106,17 +428,14 @@ async def db_details(client, query):
     
     await query.message.edit_text(msg, reply_markup=reply_markup)
 
-#===============================================================#
-
 @Client.on_callback_query(filters.regex("^back_to_db_management$"))
 async def back_to_db_management(client, query):
     """Go back to main DB channels management"""
-    if not query.from_user.id in client.admins:
+    if query.from_user.id not in client.admins:
         return await query.answer('✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!', show_alert=True)
     
     await query.answer()
     
-    # Redirect to main dbchannels display
     db_channels = getattr(client, 'db_channels', {})
     primary_db = getattr(client, 'primary_db_channel', client.db)
     
@@ -151,10 +470,7 @@ __ᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏ
         [InlineKeyboardButton('›› ᴠɪᴇᴡ ᴅᴇᴛᴀɪʟs', 'db_details')]
     ])
     
-    
     await query.message.edit_text(msg, reply_markup=reply_markup)
-
-#===============================================================#
 
 @Client.on_message(filters.command(['adddb', 'add_db']) & filters.private)
 async def quick_add_db(client: Client, message: Message):
@@ -162,7 +478,6 @@ async def quick_add_db(client: Client, message: Message):
     if message.from_user.id not in client.admins:
         return await message.reply(client.reply_text)
     
-    # Check if channel ID is provided in the command
     args = message.text.split()
     if len(args) < 2:
         return await message.reply("""<blockquote>✦ ᴀᴅᴅ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟ</blockquote>
@@ -177,33 +492,28 @@ async def quick_add_db(client: Client, message: Message):
     except ValueError:
         return await message.reply("**✗ ɪɴᴠᴀʟɪᴅ ᴄʜᴀɴɴᴇʟ ɪᴅ! ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ.**")
     
-    # Check if channel already exists
     db_channels = getattr(client, 'db_channels', {})
     if str(channel_id) in db_channels:
         return await message.reply(f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ᴀʟʀᴇᴀᴅʏ ᴀᴅᴅᴇᴅ ᴀs ᴀ ᴅʙ ᴄʜᴀɴɴᴇʟ!**")
     
-    # Verify bot can access the channel
     try:
         chat = await client.get_chat(channel_id)
         test_msg = await client.send_message(chat_id=channel_id, text="ᴛᴇsᴛɪɴɢ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss - @Okabe_xRintarou")
         await test_msg.delete()
         
-        # Add channel to database
         channel_data = {
             'name': chat.title,
-            'is_primary': len(db_channels) == 0,  # First channel becomes primary
+            'is_primary': len(db_channels) == 0,
             'is_active': True,
             'added_by': message.from_user.id
         }
         
         await client.mongodb.add_db_channel(channel_id, channel_data)
         
-        # Update client attributes
         if not hasattr(client, 'db_channels'):
             client.db_channels = {}
         client.db_channels[str(channel_id)] = channel_data
         
-        # Set as primary if it's the first channel
         if channel_data['is_primary']:
             client.primary_db_channel = channel_id
             await client.mongodb.set_primary_db_channel(channel_id)
@@ -214,7 +524,7 @@ async def quick_add_db(client: Client, message: Message):
 ›› **ɪᴅ:** `{channel_id}`
 ›› **sᴛᴀᴛᴜs:** {'ᴘʀɪᴍᴀʀʏ' if channel_data['is_primary'] else 'sᴇᴄᴏɴᴅᴀʀʏ'}
 
-ᴜsᴇ `/dbchannels` ᴛᴏ ᴍᴀɴᴀɢᴇ ᴀʟʟ ʏᴏᴜʀ ᴅʙ ᴄʜᴀɴɴᴇʟs.""")
+ᴜsᴇ `/db` ᴛᴏ ᴍᴀɴᴀɢᴇ ᴀʟʟ ʏᴏᴜʀ ᴅʙ ᴄʜᴀɴɴᴇʟs.""")
     
     except Exception as e:
         await message.reply(f"""**✗ ᴇʀʀᴏʀ ᴀᴄᴄᴇssɪɴɢ ᴄʜᴀɴɴᴇʟ!**
@@ -226,15 +536,12 @@ async def quick_add_db(client: Client, message: Message):
 • ᴄʜᴀɴɴᴇʟ ɪᴅ ɪs ᴄᴏʀʀᴇᴄᴛ
 • ᴄʜᴀɴɴᴇʟ ᴇxɪsᴛs""")
 
-#===============================================================#
-
 @Client.on_message(filters.command(['removedb', 'rm_db']) & filters.private)
 async def quick_remove_db(client: Client, message: Message):
     """Quick command to remove a DB channel"""
     if message.from_user.id not in client.admins:
         return await message.reply(client.reply_text)
     
-    # Check if channel ID is provided in the command
     args = message.text.split()
     if len(args) < 2:
         db_channels = getattr(client, 'db_channels', {})
@@ -264,11 +571,9 @@ async def quick_remove_db(client: Client, message: Message):
     if str(channel_id) not in db_channels:
         return await message.reply(f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ɴᴏᴛ ɪɴ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ!**")
     
-    # Check if trying to remove primary channel
     if db_channels[str(channel_id)].get('is_primary', False) and len(db_channels) > 1:
-        return await message.reply("**✗ ᴄᴀɴɴᴏᴛ ʀᴇᴍᴏᴠᴇ ᴘʀɪᴍᴀʀʏ ᴄʜᴀɴɴᴇʟ!**\n\n__ᴘʟᴇᴀsᴇ sᴇᴛ ᴀɴᴏᴛʜᴇʀ ᴄʜᴀɴɴᴇʟ ᴀs ᴘʀɪᴍᴀʀʏ ғɪʀsᴛ ᴜsɪɴɢ `/dbchannels`.__")
+        return await message.reply("**✗ ᴄᴀɴɴᴏᴛ ʀᴇᴍᴏᴠᴇ ᴘʀɪᴍᴀʀʏ ᴄʜᴀɴɴᴇʟ!**\n\n__ᴘʟᴇᴀsᴇ sᴇᴛ ᴀɴᴏᴛʜᴇʀ ᴄʜᴀɴɴᴇʟ ᴀs ᴘʀɪᴍᴀʀʏ ғɪʀsᴛ ᴜsɪɴɢ `/db`.__")
     
-    # Remove from database and client
     channel_name = db_channels[str(channel_id)].get('name', 'ᴜɴᴋɴᴏᴡɴ')
     await client.mongodb.remove_db_channel(channel_id)
     del client.db_channels[str(channel_id)]
@@ -279,13 +584,9 @@ async def quick_remove_db(client: Client, message: Message):
 
 ᴜsᴇ `/db` ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ʀᴇᴍᴀɪɴɪɴɢ ᴅʙ ᴄʜᴀɴɴᴇʟs.""")
 
-#===============================================================#
-
-#==========================================================================#        
-
 @Client.on_callback_query(filters.regex('^home$'))
 async def home(client: Client, query: CallbackQuery):
-    buttons = [[InlineKeyboardButton("Help", callback_data = "about"), InlineKeyboardButton("Close", callback_data = "close")]]
+    buttons = [[InlineKeyboardButton("Help", callback_data="about"), InlineKeyboardButton("Close", callback_data="close")]]
     if query.from_user.id in client.admins:
         buttons.insert(0, [InlineKeyboardButton("⛩️ ꜱᴇᴛᴛɪɴɢꜱ ⛩️", callback_data="settings")])
     await query.message.edit_text(
@@ -295,17 +596,13 @@ async def home(client: Client, query: CallbackQuery):
             username=None if not query.from_user.username else '@' + query.from_user.username,
             mention=query.from_user.mention,
             id=query.from_user.id
-                
         ),
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-    return
-
-#==========================================================================#        
 
 @Client.on_callback_query(filters.regex('^about$'))
 async def about(client: Client, query: CallbackQuery):
-    buttons = [[InlineKeyboardButton("Back", callback_data = "home"), InlineKeyboardButton("Close", callback_data = "close")]]
+    buttons = [[InlineKeyboardButton("Back", callback_data="home"), InlineKeyboardButton("Close", callback_data="close")]]
     await query.message.edit_text(
         text=client.messages.get('ABOUT', 'No Start Message').format(
             owner_id=client.owner,
@@ -315,23 +612,17 @@ async def about(client: Client, query: CallbackQuery):
             username=None if not query.from_user.username else '@' + query.from_user.username,
             mention=query.from_user.mention,
             id=query.from_user.id
-                
         ),
         reply_markup=InlineKeyboardMarkup(buttons)
     )
-    return
-
-#==========================================================================#        
 
 @Client.on_callback_query(filters.regex('^close$'))
 async def close(client: Client, query: CallbackQuery):
     await query.message.delete()
     try:
         await query.message.reply_to_message.delete()
-    except:
+    except Exception:
         pass
-
-#==========================================================================#        
 
 @Client.on_message(filters.command('ban'))
 async def ban(client: Client, message: Message):
@@ -352,10 +643,7 @@ async def ban(client: Client, message: Message):
                 await client.mongodb.ban_user(user_id)
         return await message.reply(f"__{c} users have been banned!__")
     except Exception as e:
-    
         return await message.reply(f"**Error:** `{e}`")
-
-#==========================================================================#        
 
 @Client.on_message(filters.command('unban'))
 async def unban(client: Client, message: Message):
@@ -376,8 +664,251 @@ async def unban(client: Client, message: Message):
                 await client.mongodb.unban_user(user_id)
         return await message.reply(f"__{c} users have been unbanned!__")
     except Exception as e:
-    
         return await message.reply(f"**Error:** `{e}`")
 
-#==========================================================================#                
 
+# =============================================================== #
+#                LINK GENERATOR HANDLERS (link_generator.py)      #
+# =============================================================== #
+
+async def get_db_channels_info(client):
+    """Get formatted database channels information with links"""
+    db_channels = getattr(client, 'db_channels', {})
+    primary_db = getattr(client, 'primary_db_channel', client.db)
+    
+    if not db_channels:
+        try:
+            primary_chat = await client.get_chat(primary_db)
+            if hasattr(primary_chat, 'invite_link') and primary_chat.invite_link:
+                return f"<blockquote>✦ ᴘʀɪᴍᴀʀʏ ᴅʙ ᴄʜᴀɴɴᴇʟ: <a href='{primary_chat.invite_link}'>{primary_chat.title}</a></blockquote>"
+            else:
+                return f"<blockquote>✦ ᴘʀɪᴍᴀʀʏ ᴅʙ ᴄʜᴀɴɴᴇʟ: {primary_chat.title} (`{primary_db}`)</blockquote>"
+        except Exception:
+            return f"<blockquote>✦ ᴘʀɪᴍᴀʀʏ ᴅʙ ᴄʜᴀɴɴᴇʟ: `{primary_db}`</blockquote>"
+    
+    channels_info = ["<blockquote>✦ ᴀᴠᴀɪʟᴀʙʟᴇ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs:</blockquote>"]
+    for channel_id_str, channel_data in db_channels.items():
+        channel_name = channel_data.get('name', 'ᴜɴᴋɴᴏᴡɴ')
+        is_primary_text = "✦ ᴘʀɪᴍᴀʀʏ" if channel_data.get('is_primary', False) else "• sᴇᴄᴏɴᴅᴀʀʏ"
+        
+        try:
+            chat = await client.get_chat(int(channel_id_str))
+            if hasattr(chat, 'invite_link') and chat.invite_link:
+                channels_info.append(f"{is_primary_text}: <a href='{chat.invite_link}'>{channel_name}</a>")
+            else:
+                channels_info.append(f"{is_primary_text}: {channel_name} (`{channel_id_str}`)")
+        except Exception:
+            channels_info.append(f"{is_primary_text}: {channel_name} (`{channel_id_str}`)")
+    
+    return "\n".join(channels_info)
+
+@Client.on_message(filters.private & filters.command('batch'))
+async def batch(client: Client, message: Message):
+    if message.from_user.id not in client.admins:
+        return await message.reply(client.reply_text)
+    
+    db_channels_info = await get_db_channels_info(client)
+    
+    while True:
+        try:
+            first_message = await client.ask(
+                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+{db_channels_info}
+
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
+                chat_id=message.from_user.id,
+                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                timeout=60
+            )
+        except Exception:
+            return
+        f_msg_id, source_channel_id = await get_message_id(client, first_message)
+        if f_msg_id:
+            break
+        else:
+            await first_message.reply("<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ", quote=True)
+            continue
+
+    while True:
+        try:
+            second_message = await client.ask(
+                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ʟᴀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+{db_channels_info}
+
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
+                chat_id=message.from_user.id,
+                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                timeout=60
+            )
+        except Exception:
+            return
+        s_msg_id, _ = await get_message_id(client, second_message)
+        if s_msg_id:
+            break
+        else:
+            await second_message.reply("<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ", quote=True)
+            continue
+
+    client.LOGGER(__name__, client.name).info(f"Generating batch link with source channel: {source_channel_id}, first_msg: {f_msg_id}, last_msg: {s_msg_id}")
+    string_val = f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    base64_string = await encode(string_val)
+    link = f"https://t.me/{client.username}?start={base64_string}"
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 sʜᴀʀᴇ ᴜʀʟ", url=f'https://telegram.me/share/url?url={link}')]])
+    await second_message.reply_text(f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʙᴀᴛᴄʜ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>", quote=True, reply_markup=reply_markup)
+
+@Client.on_message(filters.private & filters.command('genlink'))
+async def link_generator(client: Client, message: Message):
+    if message.from_user.id not in client.admins:
+        return await message.reply(client.reply_text)
+    
+    db_channels_info = await get_db_channels_info(client)
+    
+    while True:
+        try:
+            channel_message = await client.ask(
+                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+
+{db_channels_info}
+
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
+                chat_id=message.from_user.id,
+                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
+                timeout=60
+            )
+        except Exception:
+            return
+        msg_id, source_channel_id = await get_message_id(client, channel_message)
+        if msg_id:
+            break
+        else:
+            await channel_message.reply("<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ɴᴏᴛ ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ", quote=True)
+            continue
+
+    base64_string = await encode(f"get-{msg_id * abs(source_channel_id)}")
+    link = f"https://t.me/{client.username}?start={base64_string}"
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 sʜᴀʀᴇ ᴜʀʟ", url=f'https://telegram.me/share/url?url={link}')]])
+    await channel_message.reply_text(f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>", quote=True, reply_markup=reply_markup)
+
+@Client.on_message(filters.private & filters.command("nbatch"))
+async def nbatch(client: Client, message: Message):
+    if message.from_user.id not in client.admins:
+        return await message.reply(client.reply_text)
+    
+    args = message.text.split()
+    if len(args) < 2 or not args[1].isdigit():
+        await message.reply("<blockquote>✗ ɪɴᴠᴀʟɪᴅ ꜰᴏʀᴍᴀᴛ!</blockquote> ᴜsᴇ: /nbatch {number}")
+        return
+    
+    batch_size = int(args[1])
+    db_channels_info = await get_db_channels_info(client)
+    
+    while True:
+        try:
+            first_message = await client.ask(
+                text=f"""<blockquote>🚀 sᴇɴᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ʟɪɴᴋ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)...</blockquote>
+
+{db_channels_info}""",
+                chat_id=message.from_user.id,
+                filters=(filters.text & ~filters.forwarded),
+                timeout=60
+            )
+        except Exception:
+            return
+    
+        f_msg_id, source_channel_id = await get_message_id(client, first_message)
+        if f_msg_id:
+            break
+        else:
+            await first_message.reply("<blockquote>😫 ɪɴᴠᴀʟɪᴅ!</blockquote> sᴇɴᴅ ᴄᴏʀʀᴇᴄᴛ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴍᴇssᴀɢᴇ ʟɪɴᴋ.", quote=True)
+            continue
+    
+    s_msg_id = f_msg_id + batch_size - 1
+    
+    string_val = f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    base64_string = await encode(string_val)
+    link = f"https://t.me/{client.username}?start={base64_string}"
+    
+    reply_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📫 ʏᴏᴜʀ ʙᴀᴛᴄʜ ᴜʀʟ", url=f'https://telegram.me/share/url?url={link}')]
+    ])
+    
+    await first_message.reply_text(f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʙᴀᴛᴄʜ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>", quote=True, reply_markup=reply_markup)
+
+
+# =============================================================== #
+#                CHANNEL POST HANDLERS (channel_post.py)          #
+# =============================================================== #
+
+def generate_random_id(length: int = 8) -> str:
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+async def is_not_numeric_reply(_, __, message: Message):
+    if message.text and message.text.isdigit():
+        return False
+    return True
+
+not_numeric_filter = filters.create(is_not_numeric_reply)
+
+@Client.on_message(
+    filters.private &
+    ~filters.command([
+        'start', 'users', 'broadcast', 'batch', 'genlink', 'nbatch',
+        'usage', 'pbroadcast', 'ban', 'unban', 'db', 'adddb', 'add_db',
+        'removedb', 'rm_db', 'datadb', 'forcesub'
+    ]) &
+    not_numeric_filter
+)
+async def channel_post(client: Client, message: Message):
+    if hasattr(client, 'admins') and message.from_user.id not in client.admins:
+        text = getattr(client, 'reply_text', "You are not authorized.")
+        return await message.reply(text)
+
+    reply_text = await message.reply_text("Please wait, processing file...", quote=True)
+
+    try:
+        post_message = await message.copy(chat_id=client.db, disable_notification=True)
+    except FloodWait as e:
+        await asyncio.sleep(e.value)
+        post_message = await message.copy(chat_id=client.db, disable_notification=True)
+    except Exception as e:
+        client.LOGGER(__name__, client.name).error(f"Copying file to DB failed: {e}")
+        return await reply_text.edit_text("Something went wrong. Could not save the file.")
+
+    file_id = generate_random_id()
+    await client.mongodb.add_file(file_id, post_message.id)
+
+    link = f"https://krpicture0.blogspot.com?start={file_id}"
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]])
+
+    await reply_text.edit(
+        f"<b>ʜᴇʀᴇ ɪꜱ ʏᴏᴜʀ ʟɪɴᴋ :</b>\n\n{link}",
+        reply_markup=reply_markup,
+        disable_web_page_preview=True,
+        parse_mode=ParseMode.HTML
+    )
+
+    if not getattr(client, 'disable_btn', False):
+        try:
+            await post_message.edit_reply_markup(reply_markup)
+        except Exception:
+            pass
+
+@Client.on_message(filters.channel & filters.incoming)
+async def new_post(client: Client, message: Message):
+    db_channels = getattr(client, 'db_channels', {})
+    if str(message.chat.id) not in db_channels and message.chat.id not in db_channels:
+        return
+    if getattr(client, 'disable_btn', False):
+        return
+
+    file_id = generate_random_id()
+    await client.mongodb.add_file(file_id, message.id)
+
+    link = f"https://krpicture0.blogspot.com?start={file_id}"
+    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]])
+
+    try:
+        await message.edit_reply_markup(reply_markup)
+    except Exception:
+        pass
