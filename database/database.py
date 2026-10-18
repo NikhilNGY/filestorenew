@@ -1,6 +1,8 @@
 import base64
 import re
 import asyncio
+import urllib.parse
+import requests
 import motor.motor_asyncio
 from datetime import datetime, timedelta
 from pyrogram import filters, Client, errors
@@ -35,9 +37,10 @@ class MongoDB:
             instance.files_data = instance.db["files"]
             instance.fsub_status = instance.db["fsub_status"]
             instance.request_sub = instance.db["request_sub"]
+            instance.worker_bots = instance.db["worker_bots"]
 
             # Unlimited Secondary MongoDB Connections for /datadb
-            instance.secondary_clients = {}  # {db_id: {'name': str, 'url': str, 'client': AsyncIOMotorClient, 'db': Database}}
+            instance.secondary_clients = {}
             instance.multi_db_enabled = True
             instance._rr_index = 0
 
@@ -149,6 +152,72 @@ class MongoDB:
         return True
 
     # --------------------------------------------------------------- #
+    #       /bots & /otherbots MULTI-BOT MANAGEMENT METHODS           #
+    # --------------------------------------------------------------- #
+
+    async def get_setting(self, key: str, default=False):
+        """Generic setting getter for multi_bot_enabled, auto_rotate_enabled, etc."""
+        return await self.get_bot_setting(key, default)
+
+    async def set_setting(self, key: str, value):
+        """Generic setting setter for multi_bot_enabled, auto_rotate_enabled, etc."""
+        await self.update_bot_setting(key, value)
+
+    async def get_worker_bots(self) -> list[dict]:
+        """Return list of all connected worker bots"""
+        cursor = self.worker_bots.find({})
+        bots = []
+        async for doc in cursor:
+            bots.append({
+                "bot_id": doc.get("_id"),
+                "token": doc.get("token"),
+                "username": doc.get("username"),
+                "name": doc.get("name", "Worker Bot"),
+                "added_at": doc.get("added_at")
+            })
+        return bots
+
+    async def add_worker_bot(self, bot_id: int, token: str, username: str, name: str = "Worker Bot"):
+        """Add or update a worker bot in MongoDB"""
+        await self.worker_bots.update_one(
+            {"_id": int(bot_id)},
+            {"$set": {
+                "token": token,
+                "username": username,
+                "name": name,
+                "added_at": datetime.now()
+            }},
+            upsert=True
+        )
+        return True
+
+    async def remove_worker_bot(self, bot_id: int):
+        """Remove a specific worker bot by bot_id"""
+        await self.worker_bots.delete_one({"_id": int(bot_id)})
+        return True
+
+    async def clear_all_worker_bots(self):
+        """Remove all worker bots"""
+        await self.worker_bots.delete_many({})
+        return True
+
+    async def get_otherbots_config(self) -> dict:
+        """Fetch /otherbots universal reply configuration"""
+        doc = await self.user_data.find_one({"_id": "otherbots_config"})
+        return doc.get("config", {}) if doc else {}
+
+    async def update_otherbots_config(self, updates: dict):
+        """Update /otherbots universal reply configuration"""
+        current = await self.get_otherbots_config()
+        current.update(updates)
+        await self.user_data.update_one(
+            {"_id": "otherbots_config"},
+            {"$set": {"config": current}},
+            upsert=True
+        )
+        return current
+
+    # --------------------------------------------------------------- #
     #       FILE STORAGE ACROSS UNLIMITED DATABASES (/datadb)         #
     # --------------------------------------------------------------- #
 
@@ -164,7 +233,6 @@ class MongoDB:
             "created_at": datetime.now()
         }
 
-        # Always store in primary or round-robin across active secondary DBs if enabled
         if self.multi_db_enabled and self.secondary_clients:
             sec_list = list(self.secondary_clients.values())
             target_sec = sec_list[self._rr_index % len(sec_list)]
@@ -178,7 +246,6 @@ class MongoDB:
             except Exception as e:
                 print(f"Secondary DB write failed on {target_sec['name']}, falling back to primary: {e}")
 
-        # Save to primary DB as well so links never break if a secondary DB is removed
         await self.files_data.update_one(
             {"_id": file_id},
             {"$set": doc},
@@ -365,19 +432,15 @@ class MongoDB:
     # --------------------------------------------------------------- #
 
     async def set_fsub_status(self, enabled: bool):
-        """Save Force Subscribe global On/Off state"""
         await self.update_bot_setting("fsub_enabled", bool(enabled))
 
     async def get_fsub_status_global(self) -> bool:
-        """Get Force Subscribe global On/Off state"""
         return await self.get_bot_setting("fsub_enabled", True)
 
     async def set_auto_rotate(self, enabled: bool):
-        """Save Force Subscribe Auto Rotate state"""
         await self.update_bot_setting("auto_rotate", bool(enabled))
 
     async def get_auto_rotate(self) -> bool:
-        """Get Force Subscribe Auto Rotate state"""
         return await self.get_bot_setting("auto_rotate", False)
 
     async def set_fsub_channels(self, fsub_data: dict):
@@ -423,7 +486,7 @@ class MongoDB:
 
     async def get_shortner_status(self) -> bool:
         settings = await self.get_shortner_settings()
-        return settings.get("enabled", True)
+        return settings.get("enabled", False)
 
     async def set_shortner_status(self, enabled: bool):
         await self.update_shortner_setting("enabled", enabled)
@@ -485,238 +548,6 @@ class MongoDB:
 
     async def remove_join_request(self, user_id: int, channel_id: int):
         await self.request_sub.delete_one({"user_id": user_id, "channel_id": channel_id})
-
-    async def get_pending_requests_for_channel(self, channel_id: int) -> list:
-        cursor = self.request_sub.find({"channel_id": channel_id, "status": "pending"})
-        requests = []
-        async for doc in cursor:
-            requests.append({
-                "user_id": doc["user_id"],
-                "request_id": doc.get("request_id"),
-                "submitted_at": doc["submitted_at"]
-            })
-        return requests
-
-    async def clear_old_join_requests(self, days: int = 30):
-        cutoff_date = datetime.now() - timedelta(days=days)
-        await self.request_sub.delete_many({"submitted_at": {"$lt": cutoff_date}})
-
-    async def cleanup_database(self):
-        try:
-            await self.clear_expired_fsub_statuses(7)
-            await self.clear_old_join_requests(30)
-            await self.cleanup_orphaned_records()
-            return True
-        except Exception as e:
-            print(f"Database cleanup error: {e}")
-            return False
-
-    async def cleanup_orphaned_records(self):
-        try:
-            users = await self.full_userbase()
-            await self.fsub_status.delete_many({"user_id": {"$nin": users}})
-            await self.request_sub.delete_many({"user_id": {"$nin": users}})
-            return True
-        except Exception as e:
-            print(f"Error cleaning orphaned records: {e}")
-            return False
-
-    async def get_comprehensive_fsub_statistics(self):
-        try:
-            fsub_count = await self.fsub_status.count_documents({})
-            request_count = await self.request_sub.count_documents({})
-            pending_requests = await self.request_sub.count_documents({"status": "pending"})
-            approved_requests = await self.request_sub.count_documents({"status": "approved"})
-            rejected_requests = await self.request_sub.count_documents({"status": "rejected"})
-
-            status_breakdown = {}
-            async for doc in self.fsub_status.aggregate([
-                {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-            ]):
-                status_breakdown[doc["_id"]] = doc["count"]
-
-            channel_stats = {}
-            async for doc in self.fsub_status.aggregate([
-                {"$group": {"_id": "$channel_id", "count": {"$sum": 1}}}
-            ]):
-                channel_stats[doc["_id"]] = doc["count"]
-
-            yesterday = datetime.now() - timedelta(days=1)
-            recent_fsub_updates = await self.fsub_status.count_documents(
-                {"last_updated": {"$gte": yesterday}}
-            )
-            recent_requests = await self.request_sub.count_documents(
-                {"submitted_at": {"$gte": yesterday}}
-            )
-
-            return {
-                "total_fsub_records": fsub_count,
-                "total_join_requests": request_count,
-                "pending_requests": pending_requests,
-                "approved_requests": approved_requests,
-                "rejected_requests": rejected_requests,
-                "status_breakdown": status_breakdown,
-                "channel_statistics": channel_stats,
-                "recent_activity": {
-                    "fsub_updates_24h": recent_fsub_updates,
-                    "join_requests_24h": recent_requests
-                }
-            }
-        except Exception as e:
-            print(f"Error getting comprehensive fsub statistics: {e}")
-            return {}
-
-    async def get_user_activity_summary(self, user_id: int):
-        try:
-            fsub_statuses = await self.get_user_fsub_statuses(user_id)
-            join_requests = []
-            async for doc in self.request_sub.find({"user_id": user_id}):
-                join_requests.append({
-                    "channel_id": doc["channel_id"],
-                    "status": doc["status"],
-                    "submitted_at": doc["submitted_at"],
-                    "last_updated": doc["last_updated"]
-                })
-
-            return {
-                "user_id": user_id,
-                "is_banned": await self.is_banned(user_id),
-                "is_premium": await self.is_pro(user_id),
-                "fsub_statuses": fsub_statuses,
-                "join_request_history": join_requests,
-                "total_channels_joined": len([s for s in fsub_statuses.values() if s == "joined"]),
-                "total_requests_submitted": len(join_requests)
-            }
-        except Exception as e:
-            print(f"Error getting user activity summary for {user_id}: {e}")
-            return {}
-
-    async def get_channel_activity_summary(self, channel_id: int):
-        try:
-            channel_users = await self.get_channel_users(channel_id)
-            status_counts = {}
-            async for doc in self.fsub_status.aggregate([
-                {"$match": {"channel_id": channel_id}},
-                {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-            ]):
-                status_counts[doc["_id"]] = doc["count"]
-
-            request_stats = {}
-            async for doc in self.request_sub.aggregate([
-                {"$match": {"channel_id": channel_id}},
-                {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-            ]):
-                request_stats[doc["_id"]] = doc["count"]
-
-            week_ago = datetime.now() - timedelta(days=7)
-            recent_joins = await self.fsub_status.count_documents({
-                "channel_id": channel_id,
-                "status": "joined",
-                "last_updated": {"$gte": week_ago}
-            })
-            recent_requests = await self.request_sub.count_documents({
-                "channel_id": channel_id,
-                "submitted_at": {"$gte": week_ago}
-            })
-
-            return {
-                "channel_id": channel_id,
-                "total_users": len(channel_users),
-                "status_breakdown": status_counts,
-                "request_statistics": request_stats,
-                "recent_activity_7d": {
-                    "new_joins": recent_joins,
-                    "new_requests": recent_requests
-                }
-            }
-        except Exception as e:
-            print(f"Error getting channel activity summary for {channel_id}: {e}")
-            return {}
-
-    async def bulk_update_user_statuses(self, updates: list):
-        try:
-            operations = []
-            for update in updates:
-                operations.append({
-                    "updateOne": {
-                        "filter": {"user_id": update["user_id"], "channel_id": update["channel_id"]},
-                        "update": {
-                            "$set": {
-                                "status": update["status"],
-                                "last_updated": datetime.now()
-                            }
-                        },
-                        "upsert": True
-                    }
-                })
-            if operations:
-                return await self.fsub_status.bulk_write(operations)
-            return None
-        except Exception as e:
-            print(f"Error in bulk update user statuses: {e}")
-            return None
-
-    async def sync_channel_members(self, channel_id: int, current_members: list):
-        try:
-            stored_users = await self.get_channel_users(channel_id)
-            users_to_add = set(current_members) - set(stored_users)
-            users_to_remove = set(stored_users) - set(current_members)
-
-            for user_id in users_to_add:
-                await self.add_channel_user(channel_id, user_id)
-                await self.update_fsub_status(user_id, channel_id, "joined")
-
-            for user_id in users_to_remove:
-                await self.remove_channel_user(channel_id, user_id)
-                await self.update_fsub_status(user_id, channel_id, "left")
-
-            return {
-                "added": len(users_to_add),
-                "removed": len(users_to_remove),
-                "synced": True
-            }
-        except Exception as e:
-            print(f"Error syncing channel members for {channel_id}: {e}")
-            return {"synced": False, "error": str(e)}
-
-    async def export_fsub_data(self, channel_id: int = None):
-        try:
-            export_data = {
-                "export_timestamp": datetime.now().isoformat(),
-                "fsub_statuses": [],
-                "join_requests": []
-            }
-            filter_query = {"channel_id": channel_id} if channel_id else {}
-
-            async for doc in self.fsub_status.find(filter_query):
-                doc["_id"] = str(doc["_id"])
-                if "last_updated" in doc:
-                    doc["last_updated"] = doc["last_updated"].isoformat()
-                export_data["fsub_statuses"].append(doc)
-
-            async for doc in self.request_sub.find(filter_query):
-                doc["_id"] = str(doc["_id"])
-                if "submitted_at" in doc:
-                    doc["submitted_at"] = doc["submitted_at"].isoformat()
-                if "last_updated" in doc:
-                    doc["last_updated"] = doc["last_updated"].isoformat()
-                export_data["join_requests"].append(doc)
-
-            return export_data
-        except Exception as e:
-            print(f"Error exporting fsub data: {e}")
-            return None
-
-    async def get_fsub_statistics(self):
-        try:
-            return {
-                "fsub_status_records": await self.fsub_status.count_documents({}),
-                "join_request_records": await self.request_sub.count_documents({}),
-                "pending_requests": await self.request_sub.count_documents({"status": "pending"})
-            }
-        except Exception as e:
-            print(f"Error getting fsub statistics: {e}")
-            return {}
 
     # --------------------------------------------------------------- #
     #                  DB CHANNELS MANAGEMENT FUNCTIONS               #
@@ -851,43 +682,26 @@ class MongoDB:
             return True
         return False
 
-    async def save_all_settings(self, bot_settings: dict, messages: dict, admins: list):
-        try:
-            await self.set_bot_settings(bot_settings)
-            await self.set_messages_settings(messages)
-            await self.set_admins_list(admins)
-            return True
-        except Exception as e:
-            print(f"Error saving all settings: {e}")
-            return False
 
-    async def load_all_settings(self) -> dict:
-        try:
-            bot_settings = await self.get_bot_settings()
-            messages = await self.get_messages_settings()
-            admins = await self.get_admins_list()
-            shortner_settings = await self.get_shortner_settings()
-            multi_db_enabled = await self.get_multi_db_status()
-            db_urls = await self.get_db_urls()
+# =============================================================== #
+#                SHORTENER HELPER FUNCTION                        #
+# =============================================================== #
 
-            return {
-                "bot_settings": bot_settings,
-                "messages": messages,
-                "admins": admins,
-                "shortner_settings": shortner_settings,
-                "multi_db_enabled": multi_db_enabled,
-                "db_urls": db_urls
-            }
-        except Exception as e:
-            print(f"Error loading all settings: {e}")
-            return {
-                "bot_settings": {},
-                "messages": {},
-                "admins": [],
-                "shortner_settings": {},
-                "multi_db_enabled": True,
-                "db_urls": []
-            }
+def get_short(url: str, client) -> str:
+    """Shorten a URL using the configured shortener domain and API key"""
+    short_url = getattr(client, "short_url", None)
+    short_api = getattr(client, "short_api", None)
+    if not short_url or not short_api:
+        return url
+    try:
+        clean_domain = short_url.replace("https://", "").replace("http://", "").strip("/")
+        api_endpoint = f"https://{clean_domain}/api?api={short_api}&url={urllib.parse.quote(url)}"
+        resp = requests.get(api_endpoint, timeout=10).json()
+        if resp.get("status") == "success" or resp.get("shortenedUrl"):
+            return resp.get("shortenedUrl", url)
+    except Exception as e:
+        print(f"Shortener API error: {e}")
+    return url
 
 
 # =============================================================== #
@@ -962,18 +776,15 @@ async def get_message_id(client, message):
                     continue
     return 0, 0
 
-async def get_message_id_legacy(client, message):
-    """Legacy function for backward compatibility - returns only message ID"""
-    msg_id, _ = await get_message_id(client, message)
-    return msg_id
-
 async def get_messages_from_db_channels(client, temb_ids):
     """Get messages from multiple DB channels - tries primary first, then falls back to others"""
     messages = []
     try:
         primary_db = getattr(client, "primary_db_channel", client.db)
         msgs = await client.get_messages(chat_id=primary_db, message_ids=temb_ids)
-        valid_msgs = [msg for msg in msgs if msg is not None]
+        if not isinstance(msgs, list):
+            msgs = [msgs]
+        valid_msgs = [msg for msg in msgs if msg is not None and not getattr(msg, "empty", False)]
         messages.extend(valid_msgs)
         found_ids = {msg.id for msg in valid_msgs}
         missing_ids = [mid for mid in temb_ids if mid not in found_ids]
@@ -993,7 +804,9 @@ async def get_messages_from_db_channels(client, temb_ids):
                     chat_id=int(channel_id_str),
                     message_ids=missing_ids
                 )
-                valid_additional = [msg for msg in additional_msgs if msg is not None]
+                if not isinstance(additional_msgs, list):
+                    additional_msgs = [additional_msgs]
+                valid_additional = [msg for msg in additional_msgs if msg is not None and not getattr(msg, "empty", False)]
                 messages.extend(valid_additional)
 
                 found_additional_ids = {msg.id for msg in valid_additional}
@@ -1018,26 +831,6 @@ async def get_messages_from_db_channels(client, temb_ids):
 # =============================================================== #
 #                ADMIN & FORCE SUBSCRIBE CHECK HELPERS            #
 # =============================================================== #
-
-def get_readable_time(seconds: int) -> str:
-    count = 0
-    up_time = ""
-    time_list = []
-    time_suffix_list = ["s", "m", "h", "days"]
-    while count < 4:
-        count += 1
-        remainder, result = divmod(seconds, 60) if count < 3 else divmod(seconds, 24)
-        if seconds == 0 and remainder == 0:
-            break
-        time_list.append(int(result))
-        seconds = int(remainder)
-    for x in range(len(time_list)):
-        time_list[x] = str(time_list[x]) + time_suffix_list[x]
-    if len(time_list) == 4:
-        up_time += f"{time_list.pop()}, "
-    time_list.reverse()
-    up_time += ":".join(time_list)
-    return up_time
 
 async def is_bot_admin(client, channel_id):
     try:
@@ -1149,10 +942,9 @@ def force_sub(func):
             return await func(client, message)
 
         buttons = []
-        channels_message = f"{client.messages.get('FSUB', '')}\n\n"
+        channels_message = f"{client.messages.get('FSUB', 'Please join the required channels below to continue:')}\n\n"
 
         fsub_items = list(client.fsub_dict.items())
-        # If Auto Rotate is enabled, rotate the order of unjoined channels dynamically
         if getattr(client, "auto_rotate", False) and len(fsub_items) > 1:
             offset = int(datetime.now().timestamp()) % len(fsub_items)
             fsub_items = fsub_items[offset:] + fsub_items[:offset]
@@ -1177,11 +969,12 @@ def force_sub(func):
                     request_status = await client.mongodb.get_join_request_status(user_id, channel_id)
                     if request_status == "pending":
                         continue
-                buttons.append(InlineKeyboardButton(channel_name, url=channel_link))
+                if channel_link:
+                    buttons.append(InlineKeyboardButton(channel_name, url=channel_link))
 
         from_link = message.text.split(" ")
         if len(from_link) > 1:
-            try_again_link = f"https://t.me/{client.username}/?start={from_link[1]}"
+            try_again_link = f"https://t.me/{client.username}?start={from_link[1]}"
             buttons.append(InlineKeyboardButton("🔄 Try Again", url=try_again_link))
 
         buttons_markup = InlineKeyboardMarkup([[button] for button in buttons]) if buttons else None
@@ -1228,46 +1021,6 @@ def convert_time(duration_seconds: int) -> str:
         return parts[0]
     else:
         return ", ".join(parts[:-1]) + " ᴀɴᴅ " + parts[-1]
-
-async def auto_del_notification(bot_username, msg, delay_time, transfer):
-    temp = await msg.reply_text(
-        DEL_MSG.format(username=bot_username, time=convert_time(delay_time)),
-        disable_web_page_preview=True
-    )
-    await asyncio.sleep(delay_time)
-    try:
-        if transfer:
-            name = "• ɢᴇᴛ ғɪʟᴇs •"
-            link = f"https://t.me/{bot_username}?start={transfer}"
-            button = [[
-                InlineKeyboardButton(text=name, url=link),
-                InlineKeyboardButton(text="ᴄʟᴏsᴇ •", callback_data="close")
-            ]]
-            await temp.edit_text(
-                text=f"<b>›› Pʀᴇᴠɪᴏᴜs Mᴇssᴀɢᴇ ᴡᴀs Dᴇʟᴇᴛᴇᴅ\n\nIғ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ɢᴇᴛ ᴛʜᴇ ғɪʟᴇs ᴀɢᴀɪɴ, ᴛʜᴇɴ ᴄʟɪᴄᴋ: <a href={link}>{name}</a> ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ ᴇʟsᴇ ᴄʟᴏsᴇ ᴛʜɪs ᴍᴇssᴀɢᴇ.</b>",
-                reply_markup=InlineKeyboardMarkup(button),
-                disable_web_page_preview=True
-            )
-        else:
-            await temp.edit_text("<b>Pʀᴇᴠɪᴏᴜs Mᴇssᴀɢᴇ ᴡᴀs Dᴇʟᴇᴛᴇᴅ </b>")
-    except Exception as e:
-        print(f"Error occurred while editing the Delete message: {e}")
-        try:
-            await temp.edit_text("<b>Pʀᴇᴠɪᴏᴜs Mᴇssᴀɢᴇ ᴡᴀs Dᴇʟᴇᴛᴇᴅ </b>")
-        except Exception:
-            pass
-
-    try:
-        await msg.delete()
-    except Exception as e:
-        print(f"Error occurred on auto_del_notification() : {e}")
-
-async def delete_message(msg, delay_time):
-    await asyncio.sleep(delay_time)
-    try:
-        await msg.delete()
-    except Exception as e:
-        print(f"Error occurred on delete_message() : {e}")
 
 async def batch_auto_del_notification(bot_username, messages, delay_time, transfer_link, chat_id, client):
     """Send one notification for batch of files and delete all after timer"""
