@@ -1,17 +1,17 @@
 import asyncio
+
 from pyrogram import Client, filters
+from pyrogram.errors.pyromod import ListenerTimeout
 from pyrogram.handlers import MessageHandler
 from pyrogram.types import (
-    Message,
-    InlineKeyboardMarkup,
+    CallbackQuery,
     InlineKeyboardButton,
-    CallbackQuery
+    InlineKeyboardMarkup,
+    Message,
 )
-from pyrogram.errors.pyromod import ListenerTimeout
 
-from config import OWNER_ID, API_ID, API_HASH
-from plugins.start import resolve_and_deliver_files, is_admin
-
+from config import API_HASH, API_ID, OWNER_ID
+from plugins.start import is_admin, resolve_and_deliver_files
 
 # ================================================================================= #
 #                     WORKER BOT LIFECYCLE & LOAD BALANCER                          #
@@ -44,7 +44,9 @@ async def worker_bot_message_handler(worker_client: Client, message: Message):
             except Exception:
                 pass
         if await main_client.mongodb.is_banned(user_id):
-            return await message.reply("**🚫 You have been banned from using this bot!**")
+            return await message.reply(
+                "**🚫 You have been banned from using this bot!**"
+            )
 
     text = message.text or ""
 
@@ -60,13 +62,16 @@ async def worker_bot_message_handler(worker_client: Client, message: Message):
             main_client=main_client,
             message=message,
             base64_string=base64_string,
-            original_payload=payload
+            original_payload=payload,
         )
         return
 
     # 3. Normal /start or generic text message -> Trigger /otherbots custom reply
     config = await main_client.mongodb.get_otherbots_config()
-    reply_text = config.get("text") or "👋 **Hello! I am a file delivery worker bot.**\nUse a valid file link from our main channel to get your files."
+    reply_text = (
+        config.get("text")
+        or "👋 **Hello! I am a file delivery worker bot.**\nUse a valid file link from our main channel to get your files."
+    )
     reply_img = config.get("image")
     btn_name = config.get("button_name")
     btn_url = config.get("button_url")
@@ -78,19 +83,17 @@ async def worker_bot_message_handler(worker_client: Client, message: Message):
     try:
         if reply_img:
             bot_reply = await message.reply_photo(
-                photo=reply_img,
-                caption=reply_text,
-                reply_markup=markup
+                photo=reply_img, caption=reply_text, reply_markup=markup
             )
         else:
             bot_reply = await message.reply_text(
-                text=reply_text,
-                reply_markup=markup,
-                disable_web_page_preview=True
+                text=reply_text, reply_markup=markup, disable_web_page_preview=True
             )
         asyncio.create_task(auto_delete_task(bot_reply, 1800))
     except Exception as e:
-        main_client.LOGGER(__name__, main_client.name).warning(f"Failed to send worker bot reply: {e}")
+        main_client.LOGGER(__name__, main_client.name).warning(
+            f"Failed to send worker bot reply: {e}"
+        )
 
 
 async def start_single_worker_bot(main_client: Client, token: str) -> dict:
@@ -103,7 +106,7 @@ async def start_single_worker_bot(main_client: Client, token: str) -> dict:
         api_id=API_ID,
         api_hash=API_HASH,
         bot_token=token,
-        in_memory=True
+        in_memory=True,
     )
     worker.main_client = main_client
     worker.mongodb = main_client.mongodb
@@ -121,7 +124,7 @@ async def start_single_worker_bot(main_client: Client, token: str) -> dict:
         "bot_id": me.id,
         "username": me.username,
         "name": me.first_name or f"Bot {me.id}",
-        "token": token
+        "token": token,
     }
 
 
@@ -166,6 +169,7 @@ async def pick_worker_bot(main_client: Client) -> Client:
 #                             /bots - MULTI-BOT PANEL                               #
 # ================================================================================= #
 
+
 async def get_multi_bot_panel_data(client: Client):
     mb_status = await client.mongodb.get_setting("multi_bot_enabled", False)
     ar_status = await client.mongodb.get_setting("auto_rotate_enabled", False)
@@ -180,28 +184,30 @@ async def get_multi_bot_panel_data(client: Client):
         "__Configure your delivery worker bots below. Make sure each worker bot is an Admin in your DB Channel(s)!__"
     )
 
-    markup = InlineKeyboardMarkup([
+    markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(
-                f"Multi Bot: {'🟢 On' if mb_status else '🔴 Off'}",
-                callback_data="toggle_mb_status"
-            ),
-            InlineKeyboardButton(
-                f"Auto Rotate: {'🟢 On' if ar_status else '🔴 Off'}",
-                callback_data="toggle_ar_status"
-            )
-        ],
-        [
-            InlineKeyboardButton("➕ Add Bot", callback_data="mb_add_bot"),
-            InlineKeyboardButton("➖ Rem Bot", callback_data="mb_rem_bot")
-        ],
-        [
-            InlineKeyboardButton(f"📋 Bot List ({len(worker_bots)})", callback_data="mb_list_bots")
-        ],
-        [
-            InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")
+            [
+                InlineKeyboardButton(
+                    f"Multi Bot: {'🟢 On' if mb_status else '🔴 Off'}",
+                    callback_data="toggle_mb_status",
+                ),
+                InlineKeyboardButton(
+                    f"Auto Rotate: {'🟢 On' if ar_status else '🔴 Off'}",
+                    callback_data="toggle_ar_status",
+                ),
+            ],
+            [
+                InlineKeyboardButton("➕ Add Bot", callback_data="mb_add_bot"),
+                InlineKeyboardButton("➖ Rem Bot", callback_data="mb_rem_bot"),
+            ],
+            [
+                InlineKeyboardButton(
+                    f"📋 Bot List ({len(worker_bots)})", callback_data="mb_list_bots"
+                )
+            ],
+            [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")],
         ]
-    ])
+    )
     return text, markup
 
 
@@ -250,16 +256,22 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
         "<blockquote>**➕ ᴀᴅᴅ ᴡᴏʀᴋᴇʀ ʙᴏᴛ**</blockquote>\n\n"
         "Send the **Bot Token** from @BotFather in the next 60 seconds.\n\n"
         "⚠️ **Important:** Make sure the worker bot is already added as an **Admin** in your Primary DB Channel!",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="bots_menu")]])
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="bots_menu")]]
+        ),
     )
 
     try:
-        res = await client.listen(user_id=query.from_user.id, filters=filters.text, timeout=60)
+        res = await client.listen(
+            user_id=query.from_user.id, filters=filters.text, timeout=60
+        )
         token = res.text.strip()
         if ":" not in token:
             return await query.message.edit_text(
                 "**❌ Invalid Bot Token format!**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]])
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
+                ),
             )
 
         wait_msg = await res.reply("⏳ **Connecting and verifying worker bot...**")
@@ -269,24 +281,36 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
                 bot_id=info["bot_id"],
                 token=token,
                 username=info["username"],
-                name=info["name"]
+                name=info["name"],
             )
             await wait_msg.edit_text(
                 f"✅ **Worker Bot Connected Successfully!**\n\n"
                 f"›› **Name:** `{info['name']}`\n"
                 f"›› **Username:** @{info['username']}\n"
                 f"›› **Bot ID:** `{info['bot_id']}`",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ʙᴏᴛs", callback_data="bots_menu")]])
+                reply_markup=InlineKeyboardMarkup(
+                    [
+                        [
+                            InlineKeyboardButton(
+                                "◂ ʙᴀᴄᴋ ᴛᴏ ʙᴏᴛs", callback_data="bots_menu"
+                            )
+                        ]
+                    ]
+                ),
             )
         except Exception as e:
             await wait_msg.edit_text(
                 f"❌ **Failed to start worker bot:**\n`{e}`",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]])
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
+                ),
             )
     except ListenerTimeout:
         await query.message.edit_text(
             "**⏰ Timeout! Please try again.**",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]])
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
+            ),
         )
 
 
@@ -316,17 +340,23 @@ async def list_worker_bots(client: Client, query: CallbackQuery):
         bot_id = bot["bot_id"]
         bot_uname = bot.get("username") or f"Bot {bot_id}"
         url = f"https://t.me/{bot_uname}" if bot.get("username") else "https://t.me"
-        buttons.append([
-            InlineKeyboardButton(f"🤖 @{bot_uname}", url=url),
-            InlineKeyboardButton("🗑️ Remove bot", callback_data=f"mb_rem_specific_{bot_id}")
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(f"🤖 @{bot_uname}", url=url),
+                InlineKeyboardButton(
+                    "🗑️ Remove bot", callback_data=f"mb_rem_specific_{bot_id}"
+                ),
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton("⚠️ Remove All Bots", callback_data="mb_rem_all")])
+    buttons.append(
+        [InlineKeyboardButton("⚠️ Remove All Bots", callback_data="mb_rem_all")]
+    )
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="bots_menu")])
 
     await query.message.edit_text(
         f"📋 **Connected Worker Bots ({len(worker_bots)}):**\n\nClick **Remove bot** next to any bot to disconnect and delete it:",
-        reply_markup=InlineKeyboardMarkup(buttons)
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
 
 
@@ -376,11 +406,16 @@ async def mb_rem_all_cb(client: Client, query: CallbackQuery):
 #                         /otherbots - UNIVERSAL REPLY PANEL                        #
 # ================================================================================= #
 
+
 async def get_otherbots_panel_data(client: Client):
     config = await client.mongodb.get_otherbots_config()
     current_text = config.get("text") or "None"
     current_img = "✅ Set" if config.get("image") else "❌ None"
-    current_btn = f"{config.get('button_name')} ({config.get('button_url')})" if config.get("button_name") else "❌ None"
+    current_btn = (
+        f"{config.get('button_name')} ({config.get('button_url')})"
+        if config.get("button_name")
+        else "❌ None"
+    )
 
     text = (
         "<blockquote>⚙️ ᴡᴏʀᴋᴇʀ ʙᴏᴛs ᴜɴɪᴠᴇʀsᴀʟ ʀᴇᴘʟʏ sᴇᴛᴛɪɴɢs</blockquote>\n"
@@ -390,24 +425,26 @@ async def get_otherbots_panel_data(client: Client):
         "__Changes apply to all connected worker bots immediately.__"
     )
 
-    markup = InlineKeyboardMarkup([
+    markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("Set Text", callback_data="ob_set_txt"),
-            InlineKeyboardButton("Remove Text", callback_data="ob_rem_txt")
-        ],
-        [
-            InlineKeyboardButton("Set Image", callback_data="ob_set_img"),
-            InlineKeyboardButton("Remove Image", callback_data="ob_rem_img")
-        ],
-        [
-            InlineKeyboardButton("Set Button", callback_data="ob_set_btn"),
-            InlineKeyboardButton("Remove Button", callback_data="ob_rem_btn")
-        ],
-        [
-            InlineKeyboardButton("‹ ʙᴀᴄᴋ", callback_data="settings_page_2"),
-            InlineKeyboardButton("✖ ᴄʟᴏsᴇ", callback_data="close")
+            [
+                InlineKeyboardButton("Set Text", callback_data="ob_set_txt"),
+                InlineKeyboardButton("Remove Text", callback_data="ob_rem_txt"),
+            ],
+            [
+                InlineKeyboardButton("Set Image", callback_data="ob_set_img"),
+                InlineKeyboardButton("Remove Image", callback_data="ob_rem_img"),
+            ],
+            [
+                InlineKeyboardButton("Set Button", callback_data="ob_set_btn"),
+                InlineKeyboardButton("Remove Button", callback_data="ob_rem_btn"),
+            ],
+            [
+                InlineKeyboardButton("‹ ʙᴀᴄᴋ", callback_data="settings_page_2"),
+                InlineKeyboardButton("✖ ᴄʟᴏsᴇ", callback_data="close"),
+            ],
         ]
-    ])
+    )
     return text, markup
 
 
@@ -442,7 +479,9 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
         elif target == "img":
             await client.mongodb.update_otherbots_config({"image": None})
         elif target == "btn":
-            await client.mongodb.update_otherbots_config({"button_name": None, "button_url": None})
+            await client.mongodb.update_otherbots_config(
+                {"button_name": None, "button_url": None}
+            )
 
         await query.answer("Removed successfully! ✅")
         return await otherbots_menu_cb(client, query)
@@ -459,43 +498,74 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
 
     await query.message.edit_text(
         prompt_msg,
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="otherbots_menu")]])
+        reply_markup=InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="otherbots_menu")]]
+        ),
     )
 
     try:
         if target == "txt":
-            res = await client.listen(user_id=query.from_user.id, filters=filters.text, timeout=60)
+            res = await client.listen(
+                user_id=query.from_user.id, filters=filters.text, timeout=60
+            )
             await client.mongodb.update_otherbots_config({"text": res.text})
 
         elif target == "img":
-            res = await client.listen(user_id=query.from_user.id, filters=(filters.photo | filters.text), timeout=60)
+            res = await client.listen(
+                user_id=query.from_user.id,
+                filters=(filters.photo | filters.text),
+                timeout=60,
+            )
             if res.photo:
-                await client.mongodb.update_otherbots_config({"image": res.photo.file_id})
+                await client.mongodb.update_otherbots_config(
+                    {"image": res.photo.file_id}
+                )
             elif res.text and res.text.startswith(("http://", "https://")):
-                await client.mongodb.update_otherbots_config({"image": res.text.strip()})
+                await client.mongodb.update_otherbots_config(
+                    {"image": res.text.strip()}
+                )
             else:
                 return await query.message.edit_text(
                     "**❌ Invalid image or link!**",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="otherbots_menu")]])
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "◂ ʙᴀᴄᴋ", callback_data="otherbots_menu"
+                                )
+                            ]
+                        ]
+                    ),
                 )
 
         elif target == "btn":
-            res = await client.listen(user_id=query.from_user.id, filters=filters.text, timeout=60)
+            res = await client.listen(
+                user_id=query.from_user.id, filters=filters.text, timeout=60
+            )
             if "|" in res.text:
                 name, url = res.text.split("|", 1)
-                await client.mongodb.update_otherbots_config({
-                    "button_name": name.strip(),
-                    "button_url": url.strip()
-                })
+                await client.mongodb.update_otherbots_config(
+                    {"button_name": name.strip(), "button_url": url.strip()}
+                )
             else:
                 return await query.message.edit_text(
                     "**❌ Invalid format! Must include `|` separator.**",
-                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="otherbots_menu")]])
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "◂ ʙᴀᴄᴋ", callback_data="otherbots_menu"
+                                )
+                            ]
+                        ]
+                    ),
                 )
 
         await otherbots_menu_cb(client, query)
     except ListenerTimeout:
         await query.message.edit_text(
             "**⏰ Timeout! Try again.**",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="otherbots_menu")]])
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="otherbots_menu")]]
+            ),
         )

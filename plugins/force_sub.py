@@ -1,17 +1,17 @@
 from pyrogram import Client, filters
-from pyrogram.types import (
-    CallbackQuery,
-    Message,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ChatJoinRequest,
-    ChatMemberUpdated
-)
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors.pyromod import ListenerTimeout
+from pyrogram.types import (
+    CallbackQuery,
+    ChatJoinRequest,
+    ChatMemberUpdated,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
-from database.database import is_bot_admin
 from config import OWNER_ID
+from database.database import is_bot_admin
 
 
 def is_admin(client: Client, user_id: int) -> bool:
@@ -26,6 +26,7 @@ def _has_fsub_channel(client: Client, channel_id: int) -> bool:
 # =============================================================== #
 #                JOIN REQUEST & MEMBER HANDLERS                   #
 # =============================================================== #
+
 
 @Client.on_chat_join_request(filters.channel)
 async def handle_join_request(client: Client, join_request: ChatJoinRequest):
@@ -46,11 +47,17 @@ async def handle_join_request(client: Client, join_request: ChatJoinRequest):
         if not await client.mongodb.present_user(user_id):
             await client.mongodb.add_user(user_id)
 
-        await client.mongodb.add_join_request(user_id, channel_id, getattr(join_request, "id", None))
-        await client.mongodb.update_fsub_status(user_id, channel_id, "request_submitted")
+        await client.mongodb.add_join_request(
+            user_id, channel_id, getattr(join_request, "id", None)
+        )
+        await client.mongodb.update_fsub_status(
+            user_id, channel_id, "request_submitted"
+        )
         await client.mongodb.add_channel_user(channel_id, user_id)
     except Exception as e:
-        client.LOGGER(__name__, client.name).error(f"Join request error: {user_id} in {channel_id}: {e}")
+        client.LOGGER(__name__, client.name).error(
+            f"Join request error: {user_id} in {channel_id}: {e}"
+        )
 
 
 @Client.on_chat_member_updated(filters.channel)
@@ -68,23 +75,41 @@ async def handle_member_update(client: Client, chat_member_updated: ChatMemberUp
     if not _has_fsub_channel(client, channel_id):
         return
 
-    old_status = chat_member_updated.old_chat_member.status if chat_member_updated.old_chat_member else None
-    new_status = chat_member_updated.new_chat_member.status if chat_member_updated.new_chat_member else None
+    old_status = (
+        chat_member_updated.old_chat_member.status
+        if chat_member_updated.old_chat_member
+        else None
+    )
+    new_status = (
+        chat_member_updated.new_chat_member.status
+        if chat_member_updated.new_chat_member
+        else None
+    )
 
     try:
         if not await client.mongodb.present_user(user_id):
             await client.mongodb.add_user(user_id)
 
-        active_statuses = {ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER}
+        active_statuses = {
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER,
+        }
 
-        if new_status in active_statuses and (old_status is None or old_status not in active_statuses):
+        if new_status in active_statuses and (
+            old_status is None or old_status not in active_statuses
+        ):
             await client.mongodb.update_fsub_status(user_id, channel_id, "joined")
             await client.mongodb.add_channel_user(channel_id, user_id)
 
             if await client.mongodb.has_submitted_join_request(user_id, channel_id):
-                await client.mongodb.update_join_request_status(user_id, channel_id, "approved")
+                await client.mongodb.update_join_request_status(
+                    user_id, channel_id, "approved"
+                )
 
-        elif old_status in active_statuses and (new_status is None or new_status not in active_statuses):
+        elif old_status in active_statuses and (
+            new_status is None or new_status not in active_statuses
+        ):
             await client.mongodb.update_fsub_status(user_id, channel_id, "left")
             await client.mongodb.remove_channel_user(channel_id, user_id)
 
@@ -103,12 +128,15 @@ async def handle_member_update(client: Client, chat_member_updated: ChatMemberUp
             await client.mongodb.add_channel_user(channel_id, user_id)
 
     except Exception as e:
-        client.LOGGER(__name__, client.name).error(f"Member update error: {user_id} in {channel_id}: {e}")
+        client.LOGGER(__name__, client.name).error(
+            f"Member update error: {user_id} in {channel_id}: {e}"
+        )
 
 
 # =============================================================== #
 #                FORCE SUBSCRIBE MENU & HELPERS                   #
 # =============================================================== #
+
 
 def get_fsub_text_and_markup(client: Client):
     """Generates the Force Sub menu message text and InlineKeyboardMarkup."""
@@ -127,10 +155,22 @@ def get_fsub_text_and_markup(client: Client):
     if client.fsub_dict:
         channel_list = []
         for channel_id, channel_data in client.fsub_dict.items():
-            channel_name = channel_data[0] if channel_data and len(channel_data) > 0 else "Unknown"
-            request_status = "Request: ✅" if len(channel_data) > 2 and channel_data[2] else "Request: ❌"
-            timer_status = f"Timer: {channel_data[3]}m" if len(channel_data) > 3 and channel_data[3] > 0 else "Timer: ∞"
-            channel_list.append(f"• `{channel_name}` (`{channel_id}`) - {request_status}, {timer_status}")
+            channel_name = (
+                channel_data[0] if channel_data and len(channel_data) > 0 else "Unknown"
+            )
+            request_status = (
+                "Request: ✅"
+                if len(channel_data) > 2 and channel_data[2]
+                else "Request: ❌"
+            )
+            timer_status = (
+                f"Timer: {channel_data[3]}m"
+                if len(channel_data) > 3 and channel_data[3] > 0
+                else "Timer: ∞"
+            )
+            channel_list.append(
+                f"• `{channel_name}` (`{channel_id}`) - {request_status}, {timer_status}"
+            )
 
         channels_display = "\n".join(channel_list)
     else:
@@ -145,23 +185,27 @@ def get_fsub_text_and_markup(client: Client):
 
 __Use the buttons below to manage your force subscription settings and channels!__"""
 
-    reply_markup = InlineKeyboardMarkup([
+    reply_markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(f"Force Sub: {fsub_status}", callback_data="toggle_fsub"),
-            InlineKeyboardButton(f"Auto Rotate: {rotate_status}", callback_data="toggle_rotate")
-        ],
-        [
-            InlineKeyboardButton("➕ Add FSub", callback_data="add_fsub"),
-            InlineKeyboardButton("➖ Rm FSub", callback_data="rm_fsub")
-        ],
-        [
-            InlineKeyboardButton("📋 GetAllFSub", callback_data="getall_fsub"),
-            InlineKeyboardButton("🗑️ RmAllFSub", callback_data="rmall_fsub")
-        ],
-        [
-            InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")
+            [
+                InlineKeyboardButton(
+                    f"Force Sub: {fsub_status}", callback_data="toggle_fsub"
+                ),
+                InlineKeyboardButton(
+                    f"Auto Rotate: {rotate_status}", callback_data="toggle_rotate"
+                ),
+            ],
+            [
+                InlineKeyboardButton("➕ Add FSub", callback_data="add_fsub"),
+                InlineKeyboardButton("➖ Rm FSub", callback_data="rm_fsub"),
+            ],
+            [
+                InlineKeyboardButton("📋 GetAllFSub", callback_data="getall_fsub"),
+                InlineKeyboardButton("🗑️ RmAllFSub", callback_data="rmall_fsub"),
+            ],
+            [InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")],
         ]
-    ])
+    )
     return msg, reply_markup
 
 
@@ -191,6 +235,7 @@ async def fsub(client: Client, query: CallbackQuery):
 # =============================================================== #
 #                BUTTON CALLBACK HANDLERS                         #
 # =============================================================== #
+
 
 @Client.on_callback_query(filters.regex("^toggle_fsub$"))
 async def toggle_fsub_cb(client: Client, query: CallbackQuery):
@@ -236,7 +281,7 @@ async def add_fsub(client: Client, query: CallbackQuery):
             "• `yes` = Join Request link enabled\n"
             "• `5` = Invite link expires after 5 minutes</blockquote>",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -246,13 +291,17 @@ async def add_fsub(client: Client, query: CallbackQuery):
     try:
         channel_info = ask_channel_info.text.split()
         if len(channel_info) != 3:
-            return await ask_channel_info.reply("**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**")
+            return await ask_channel_info.reply(
+                "**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**"
+            )
 
         channel_id_str, request_str, timer_str = channel_info
         channel_id = int(channel_id_str)
 
         if _has_fsub_channel(client, channel_id):
-            return await ask_channel_info.reply("**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**")
+            return await ask_channel_info.reply(
+                "**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**"
+            )
 
         val, res = await is_bot_admin(client, channel_id)
         if not val:
@@ -263,12 +312,16 @@ async def add_fsub(client: Client, query: CallbackQuery):
         elif request_str.lower() in ("false", "off", "no"):
             request = False
         else:
-            return await ask_channel_info.reply("**✗ Invalid request value! Use `yes` or `no`.**")
+            return await ask_channel_info.reply(
+                "**✗ Invalid request value! Use `yes` or `no`.**"
+            )
 
         if timer_str.isdigit():
             timer = int(timer_str)
         else:
-            return await ask_channel_info.reply("**✗ Timer must be a valid non-negative integer!**")
+            return await ask_channel_info.reply(
+                "**✗ Timer must be a valid non-negative integer!**"
+            )
 
         chat = await client.get_chat(channel_id)
         name = chat.title
@@ -276,7 +329,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
         if timer > 0:
             client.fsub_dict[channel_id] = [name, None, request, timer]
         else:
-            chat_link = await client.create_chat_invite_link(channel_id, creates_join_request=request)
+            chat_link = await client.create_chat_invite_link(
+                channel_id, creates_join_request=request
+            )
             link = chat_link.invite_link
             client.fsub_dict[channel_id] = [name, link, request, timer]
 
@@ -286,7 +341,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
 
         await client.mongodb.add_fsub_channel(channel_id, client.fsub_dict[channel_id])
         await fsub(client, query)
-        return await ask_channel_info.reply(f"**✓ Channel `{name.strip()}` (`{channel_id}`) has been added to Force Subscribe!**")
+        return await ask_channel_info.reply(
+            f"**✓ Channel `{name.strip()}` (`{channel_id}`) has been added to Force Subscribe!**"
+        )
     except Exception as e:
         return await ask_channel_info.reply(f"**✗ Error:** `{e}`")
 
@@ -303,7 +360,7 @@ async def rm_fsub(client: Client, query: CallbackQuery):
             query.from_user.id,
             "Send the **channel ID** (negative integer value) to remove in the next 60 seconds!",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -313,7 +370,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
     try:
         channel_id = int(ask_channel_info.text.strip())
         if not _has_fsub_channel(client, channel_id):
-            return await ask_channel_info.reply("**✗ This channel ID is not in the Force Sub list!**")
+            return await ask_channel_info.reply(
+                "**✗ This channel ID is not in the Force Sub list!**"
+            )
 
         if channel_id in client.req_channels:
             client.req_channels.remove(channel_id)
@@ -324,7 +383,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         await client.mongodb.remove_fsub_channel(channel_id)
 
         await fsub(client, query)
-        return await ask_channel_info.reply(f"**✓ Channel `{channel_id}` has been removed from Force Subscribe!**")
+        return await ask_channel_info.reply(
+            f"**✓ Channel `{channel_id}` has been removed from Force Subscribe!**"
+        )
     except Exception as e:
         return await ask_channel_info.reply(f"**✗ Error:** `{e}`")
 
@@ -336,7 +397,9 @@ async def getall_fsub(client: Client, query: CallbackQuery):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     if not getattr(client, "fsub_dict", {}):
-        return await query.answer("No Force Sub channels are currently configured!", show_alert=True)
+        return await query.answer(
+            "No Force Sub channels are currently configured!", show_alert=True
+        )
 
     await query.answer()
     details = ["**📋 All Force Subscription Channels:**\n"]
@@ -353,8 +416,12 @@ async def getall_fsub(client: Client, query: CallbackQuery):
             f"   • **Invite Link:** {link}\n"
         )
 
-    markup = InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ꜰsᴜʙ ᴍᴇɴᴜ", callback_data="fsub")]])
-    await query.message.edit_text("\n".join(details), reply_markup=markup, disable_web_page_preview=True)
+    markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ꜰsᴜʙ ᴍᴇɴᴜ", callback_data="fsub")]]
+    )
+    await query.message.edit_text(
+        "\n".join(details), reply_markup=markup, disable_web_page_preview=True
+    )
 
 
 @Client.on_callback_query(filters.regex("^rmall_fsub$"))
@@ -367,15 +434,19 @@ async def rmall_fsub(client: Client, query: CallbackQuery):
         return await query.answer("Force Sub list is already empty!", show_alert=True)
 
     await query.answer()
-    markup = InlineKeyboardMarkup([
+    markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("✅ Yes, Remove All", callback_data="confirm_rmall_fsub"),
-            InlineKeyboardButton("❌ Cancel", callback_data="fsub")
+            [
+                InlineKeyboardButton(
+                    "✅ Yes, Remove All", callback_data="confirm_rmall_fsub"
+                ),
+                InlineKeyboardButton("❌ Cancel", callback_data="fsub"),
+            ]
         ]
-    ])
+    )
     await query.message.edit_text(
         "**⚠️ Are you sure you want to remove ALL Force Subscribe channels?**\n\n__This action will clear all channels from memory and database!__",
-        reply_markup=markup
+        reply_markup=markup,
     )
 
 
@@ -398,7 +469,9 @@ async def confirm_rmall_fsub(client: Client, query: CallbackQuery):
             client.req_channels.clear()
             await client.mongodb.set_channels(client.req_channels)
 
-        await query.answer("✅ All Force Sub channels have been removed!", show_alert=True)
+        await query.answer(
+            "✅ All Force Sub channels have been removed!", show_alert=True
+        )
         await fsub(client, query)
     except Exception as e:
         await query.answer(f"Error removing channels: {e}", show_alert=True)

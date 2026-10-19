@@ -1,53 +1,60 @@
-import secrets
-import string
 import asyncio
+import secrets
 import shutil
-import psutil
+import string
 from datetime import datetime
+
+import psutil
 from pyrogram import Client, filters
-from pyrogram.types import (
-    CallbackQuery,
-    Message,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
 from pyrogram.enums import ParseMode
 from pyrogram.errors import (
     FloodWait,
-    UserIsBlocked,
     InputUserDeactivated,
-    PeerIdInvalid
+    PeerIdInvalid,
+    UserIsBlocked,
 )
 from pyrogram.errors.pyromod import ListenerTimeout
+from pyrogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
-from database.database import encode, get_message_id
 from config import OWNER_ID
-
+from database.database import encode, get_message_id
 
 # =============================================================== #
 #                ADMIN SETTINGS & SYSTEM STATS                    #
 # =============================================================== #
 
+
 @Client.on_callback_query(filters.regex("^admins$"))
 async def admins(client: Client, query: CallbackQuery):
     if query.from_user.id != OWNER_ID:
-        return await query.answer("✗ This can only be used by the owner!", show_alert=True)
+        return await query.answer(
+            "✗ This can only be used by the owner!", show_alert=True
+        )
 
-    admin_list = ", ".join(f"`{a}`" for a in client.admins) if getattr(client, "admins", None) else "_None_"
+    admin_list = (
+        ", ".join(f"`{a}`" for a in client.admins)
+        if getattr(client, "admins", None)
+        else "_None_"
+    )
     msg = f"""<blockquote>**✦ Admin Settings:**</blockquote>
 **Admin User IDs:** {admin_list}
 
 __Use the appropriate button below to add or remove an admin based on your needs!__"""
 
-    reply_markup = InlineKeyboardMarkup([
+    reply_markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("ᴀᴅᴅ ᴀᴅᴍɪɴ", callback_data="add_admin"),
-            InlineKeyboardButton("ʀᴇᴍᴏᴠᴇ ᴀᴅᴍɪɴ", callback_data="rm_admin")
-        ],
-        [
-            InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="settings")
+            [
+                InlineKeyboardButton("ᴀᴅᴅ ᴀᴅᴍɪɴ", callback_data="add_admin"),
+                InlineKeyboardButton("ʀᴇᴍᴏᴠᴇ ᴀᴅᴍɪɴ", callback_data="rm_admin"),
+            ],
+            [InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="settings")],
         ]
-    ])
+    )
     try:
         await query.message.edit_text(msg, reply_markup=reply_markup)
     except Exception:
@@ -65,7 +72,7 @@ async def add_new_admins(client: Client, query: CallbackQuery):
             query.from_user.id,
             "Send user IDs separated by a space in the next 60 seconds!\nEg: `838278682 83622928 82789928`",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -85,13 +92,17 @@ async def add_new_admins(client: Client, query: CallbackQuery):
         return await ids_msg.reply(f"**Error:** `{e}`")
 
     await admins(client, query)
-    return await ids_msg.reply(f"__{added_count} admin {'ID' if added_count == 1 else 'IDs'} have been promoted!__")
+    return await ids_msg.reply(
+        f"__{added_count} admin {'ID' if added_count == 1 else 'IDs'} have been promoted!__"
+    )
 
 
 @Client.on_callback_query(filters.regex("^rm_admin$"))
 async def remove_admins(client: Client, query: CallbackQuery):
     if query.from_user.id != OWNER_ID:
-        return await query.answer("✗ Only the owner can remove admins!", show_alert=True)
+        return await query.answer(
+            "✗ Only the owner can remove admins!", show_alert=True
+        )
 
     await query.answer()
     try:
@@ -99,7 +110,7 @@ async def remove_admins(client: Client, query: CallbackQuery):
             query.from_user.id,
             "Send user IDs separated by a space in the next 60 seconds!\nEg: `838278682 83622928 82789928`",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -112,7 +123,10 @@ async def remove_admins(client: Client, query: CallbackQuery):
         for identifier in ids:
             uid = int(identifier)
             if uid == OWNER_ID:
-                await client.send_message(query.from_user.id, "**⚠️ Cannot remove the owner from the admin list!**")
+                await client.send_message(
+                    query.from_user.id,
+                    "**⚠️ Cannot remove the owner from the admin list!**",
+                )
                 continue
             if uid in client.admins:
                 client.admins.remove(uid)
@@ -122,7 +136,9 @@ async def remove_admins(client: Client, query: CallbackQuery):
         return await ids_msg.reply(f"**Error:** `{e}`")
 
     await admins(client, query)
-    return await ids_msg.reply(f"__{removed_count} admin {'ID' if removed_count == 1 else 'IDs'} have been removed!__")
+    return await ids_msg.reply(
+        f"__{removed_count} admin {'ID' if removed_count == 1 else 'IDs'} have been removed!__"
+    )
 
 
 @Client.on_message(filters.command(["stats", "usage"]))
@@ -197,9 +213,19 @@ async def usage_cmd(client: Client, message: Message):
         bot_memory_usage = 0.0
         bot_status = "✗ ᴇʀʀᴏʀ"
 
-    disk_status = "✓ ɴᴏʀᴍᴀʟ" if disk_percent < 80 else "✗ ʜɪɢʜ" if disk_percent < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
-    ram_status = "✓ ɴᴏʀᴍᴀʟ" if ram_percent < 80 else "✗ ʜɪɢʜ" if ram_percent < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
-    cpu_status = "✓ ɴᴏʀᴍᴀʟ" if cpu_usage < 80 else "✗ ʜɪɢʜ" if cpu_usage < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
+    disk_status = (
+        "✓ ɴᴏʀᴍᴀʟ"
+        if disk_percent < 80
+        else "✗ ʜɪɢʜ" if disk_percent < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
+    )
+    ram_status = (
+        "✓ ɴᴏʀᴍᴀʟ"
+        if ram_percent < 80
+        else "✗ ʜɪɢʜ" if ram_percent < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
+    )
+    cpu_status = (
+        "✓ ɴᴏʀᴍᴀʟ" if cpu_usage < 80 else "✗ ʜɪɢʜ" if cpu_usage < 95 else "✗ ᴄʀɪᴛɪᴄᴀʟ"
+    )
 
     msg = f"""<blockquote>✦ sʏsᴛᴇᴍ ᴜsᴀɢᴇ sᴛᴀᴛs</blockquote>
 
@@ -244,10 +270,13 @@ async def usage_cmd(client: Client, message: Message):
 #                USERS & BROADCAST HANDLERS                       #
 # =============================================================== #
 
+
 @Client.on_message(filters.command("users"))
 async def user_count(client: Client, message: Message):
     if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
-        return await message.reply(getattr(client, "reply_text", "You are not authorized."))
+        return await message.reply(
+            getattr(client, "reply_text", "You are not authorized.")
+        )
     total_users = await client.mongodb.full_userbase()
     await message.reply(f"**{len(total_users)} Users are using this bot currently!**")
 
@@ -255,10 +284,14 @@ async def user_count(client: Client, message: Message):
 async def _execute_broadcast(client: Client, message: Message, pin: bool = False):
     """Unified, high-efficiency broadcast engine for standard and pinned broadcasts."""
     if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
-        return await message.reply(getattr(client, "reply_text", "You are not authorized."))
+        return await message.reply(
+            getattr(client, "reply_text", "You are not authorized.")
+        )
 
     if not message.reply_to_message:
-        msg = await message.reply("Use This Command As A Reply To Any Telegram Message Without Any Spaces.")
+        msg = await message.reply(
+            "Use This Command As A Reply To Any Telegram Message Without Any Spaces."
+        )
         await asyncio.sleep(8)
         return await msg.delete()
 
@@ -270,7 +303,9 @@ async def _execute_broadcast(client: Client, message: Message, pin: bool = False
     deleted = 0
     unsuccessful = 0
 
-    pls_wait = await message.reply("<blockquote><i>Broadcasting Message.. This will Take Some Time</i></blockquote>")
+    pls_wait = await message.reply(
+        "<blockquote><i>Broadcasting Message.. This will Take Some Time</i></blockquote>"
+    )
 
     for chat_id in query:
         try:
@@ -278,7 +313,9 @@ async def _execute_broadcast(client: Client, message: Message, pin: bool = False
             successful += 1
             if pin:
                 try:
-                    await client.pin_chat_message(chat_id=chat_id, message_id=sent_msg.id, both_sides=True)
+                    await client.pin_chat_message(
+                        chat_id=chat_id, message_id=sent_msg.id, both_sides=True
+                    )
                 except Exception:
                     pass
         except FloodWait as e:
@@ -288,7 +325,9 @@ async def _execute_broadcast(client: Client, message: Message, pin: bool = False
                 sent_msg = await broadcast_msg.copy(chat_id)
                 successful += 1
                 if pin:
-                    await client.pin_chat_message(chat_id=chat_id, message_id=sent_msg.id, both_sides=True)
+                    await client.pin_chat_message(
+                        chat_id=chat_id, message_id=sent_msg.id, both_sides=True
+                    )
             except Exception:
                 unsuccessful += 1
         except UserIsBlocked:
@@ -298,7 +337,9 @@ async def _execute_broadcast(client: Client, message: Message, pin: bool = False
             await client.mongodb.del_user(chat_id)
             deleted += 1
         except Exception as e:
-            client.LOGGER(__name__, client.name).warning(f"Failed to broadcast to {chat_id}: {e}")
+            client.LOGGER(__name__, client.name).warning(
+                f"Failed to broadcast to {chat_id}: {e}"
+            )
             unsuccessful += 1
 
         total += 1
@@ -336,6 +377,7 @@ async def pin_bdcst_text(client: Client, message: Message):
 #                MULTI-DATABASE (/datadb) MANAGER                 #
 # =============================================================== #
 
+
 def ensure_multidb_attrs(client):
     """Ensure client has multi-database attributes initialized (Unlimited DBs)."""
     if not hasattr(client, "multi_db_enabled"):
@@ -359,31 +401,44 @@ def get_datadb_main_menu(client):
 
 __Use the buttons below to manage your Multi-Database URLs and settings!__"""
 
-    reply_markup = InlineKeyboardMarkup([
+    reply_markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton(on_text, callback_data="multidb_on"),
-            InlineKeyboardButton(off_text, callback_data="multidb_off")
-        ],
-        [
-            InlineKeyboardButton("➕ Add url", callback_data="multidb_add"),
-            InlineKeyboardButton("📋 url list", callback_data="multidb_list")
-        ],
-        [
-            InlineKeyboardButton("➖ Remove url", callback_data="multidb_rm_prompt"),
-            InlineKeyboardButton("🗑️ Remove All url", callback_data="multidb_rm_all")
-        ],
-        [
-            InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")
+            [
+                InlineKeyboardButton(on_text, callback_data="multidb_on"),
+                InlineKeyboardButton(off_text, callback_data="multidb_off"),
+            ],
+            [
+                InlineKeyboardButton("➕ Add url", callback_data="multidb_add"),
+                InlineKeyboardButton("📋 url list", callback_data="multidb_list"),
+            ],
+            [
+                InlineKeyboardButton(
+                    "➖ Remove url", callback_data="multidb_rm_prompt"
+                ),
+                InlineKeyboardButton(
+                    "🗑️ Remove All url", callback_data="multidb_rm_all"
+                ),
+            ],
+            [InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")],
         ]
-    ])
+    )
     return msg, reply_markup
 
 
 @Client.on_message(filters.command("datadb") & filters.private)
 async def datadb_command(client: Client, message: Message):
     """Handle /datadb command to display the Multi Database interactive panel."""
-    if message.from_user.id not in getattr(client, "admins", []) and message.from_user.id != OWNER_ID:
-        return await message.reply(getattr(client, "reply_text", "**⚠️ You are not authorized to use this command!**"))
+    if (
+        message.from_user.id not in getattr(client, "admins", [])
+        and message.from_user.id != OWNER_ID
+    ):
+        return await message.reply(
+            getattr(
+                client,
+                "reply_text",
+                "**⚠️ You are not authorized to use this command!**",
+            )
+        )
 
     msg, reply_markup = get_datadb_main_menu(client)
     await message.reply_text(msg, reply_markup=reply_markup)
@@ -392,7 +447,10 @@ async def datadb_command(client: Client, message: Message):
 @Client.on_callback_query(filters.regex("^datadb_menu$"))
 async def datadb_menu_cb(client: Client, query: CallbackQuery):
     """Return to or refresh the main /datadb menu."""
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     msg, reply_markup = get_datadb_main_menu(client)
@@ -405,23 +463,31 @@ async def datadb_menu_cb(client: Client, query: CallbackQuery):
 @Client.on_callback_query(filters.regex("^multidb_(on|off)$"))
 async def multidb_toggle_cb(client: Client, query: CallbackQuery):
     """Switch Multi Database On or Off."""
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
     action = query.data.split("_")[1]
-    client.multi_db_enabled = (action == "on")
+    client.multi_db_enabled = action == "on"
 
     await client.mongodb.set_multi_db_status(client.multi_db_enabled)
 
-    await query.answer(f"Multi Database turned {'ON ✅' if client.multi_db_enabled else 'OFF ❌'}")
+    await query.answer(
+        f"Multi Database turned {'ON ✅' if client.multi_db_enabled else 'OFF ❌'}"
+    )
     await datadb_menu_cb(client, query)
 
 
 @Client.on_callback_query(filters.regex("^multidb_add$"))
 async def multidb_add_cb(client: Client, query: CallbackQuery):
     """Add an unlimited number of Database URLs."""
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -435,7 +501,7 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
             "**Example:**\n`DB1 mongodb+srv://user:pass@cluster.mongodb.net/`\n\n"
             "*(Or simply send the `mongodb+srv://...` URL directly and a name will be auto-assigned)*",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -453,14 +519,18 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
 
     for entry in client.db_urls:
         if entry["url"] == url:
-            return await ask_info.reply("**✗ This Database URL is already added in the list!**")
+            return await ask_info.reply(
+                "**✗ This Database URL is already added in the list!**"
+            )
 
-    short_id = "".join(secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6))
+    short_id = "".join(
+        secrets.choice(string.ascii_lowercase + string.digits) for _ in range(6)
+    )
     new_db_entry = {
         "id": short_id,
         "name": name,
         "url": url,
-        "added_by": query.from_user.id
+        "added_by": query.from_user.id,
     }
     client.db_urls.append(new_db_entry)
     await client.mongodb.add_db_url(new_db_entry)
@@ -475,7 +545,10 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_list$"))
 async def multidb_list_cb(client: Client, query: CallbackQuery):
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -488,12 +561,20 @@ async def multidb_list_cb(client: Client, query: CallbackQuery):
     for idx, entry in enumerate(client.db_urls, 1):
         db_id = entry["id"]
         db_name = entry["name"]
-        buttons.append([
-            InlineKeyboardButton(f"{idx}. {db_name}", callback_data=f"multidb_info_{db_id}"),
-            InlineKeyboardButton("remove url", callback_data=f"multidb_del_{db_id}")
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    f"{idx}. {db_name}", callback_data=f"multidb_info_{db_id}"
+                ),
+                InlineKeyboardButton(
+                    "remove url", callback_data=f"multidb_del_{db_id}"
+                ),
+            ]
+        )
 
-    buttons.append([InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ᴅᴀᴛᴀᴅʙ", callback_data="datadb_menu")])
+    buttons.append(
+        [InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ᴅᴀᴛᴀᴅʙ", callback_data="datadb_menu")]
+    )
 
     msg = f"""<blockquote>**📋 ᴄᴏɴғɪɢᴜʀᴇᴅ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ ʟɪsᴛ ({len(client.db_urls)})**</blockquote>
 
@@ -510,17 +591,21 @@ async def multidb_info_cb(client: Client, query: CallbackQuery):
     for entry in client.db_urls:
         if entry["id"] == db_id:
             url_str = entry["url"]
-            masked_url = url_str[:22] + "..." + url_str[-12:] if len(url_str) > 38 else url_str
+            masked_url = (
+                url_str[:22] + "..." + url_str[-12:] if len(url_str) > 38 else url_str
+            )
             return await query.answer(
-                f"🗂 Name: {entry['name']}\n🔗 URL: {masked_url}",
-                show_alert=True
+                f"🗂 Name: {entry['name']}\n🔗 URL: {masked_url}", show_alert=True
             )
     await query.answer("Database entry not found!", show_alert=True)
 
 
 @Client.on_callback_query(filters.regex("^multidb_del_(.+)$"))
 async def multidb_del_single_cb(client: Client, query: CallbackQuery):
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -547,7 +632,10 @@ async def multidb_del_single_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_rm_prompt$"))
 async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -562,7 +650,7 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
             "Send the **Url Name** or full **MongoDB URL** you want to remove in the next 60 seconds:\n\n"
             "__Tip: You can also remove URLs with 1 click from the `url list` button!__",
             filters=filters.text,
-            timeout=60
+            timeout=60,
         )
     except ListenerTimeout:
         return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
@@ -572,45 +660,65 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
     target = ask_rm.text.strip()
     removed_entry = None
     for entry in list(client.db_urls):
-        if entry["name"].lower() == target.lower() or entry["url"] == target or entry["id"] == target:
+        if (
+            entry["name"].lower() == target.lower()
+            or entry["url"] == target
+            or entry["id"] == target
+        ):
             removed_entry = entry
             client.db_urls.remove(entry)
             break
 
     if not removed_entry:
-        return await ask_rm.reply(f"**✗ Could not find any Database URL matching `{target}`!**")
+        return await ask_rm.reply(
+            f"**✗ Could not find any Database URL matching `{target}`!**"
+        )
 
     await client.mongodb.remove_db_url(removed_entry["id"])
     await datadb_menu_cb(client, query)
-    await ask_rm.reply(f"**✓ Successfully removed Database URL:** `{removed_entry['name']}`")
+    await ask_rm.reply(
+        f"**✓ Successfully removed Database URL:** `{removed_entry['name']}`"
+    )
 
 
 @Client.on_callback_query(filters.regex("^multidb_rm_all$"))
 async def multidb_rm_all_cb(client: Client, query: CallbackQuery):
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
     if not client.db_urls:
-        return await query.answer("Database URL list is already empty!", show_alert=True)
+        return await query.answer(
+            "Database URL list is already empty!", show_alert=True
+        )
 
     await query.answer()
-    markup = InlineKeyboardMarkup([
+    markup = InlineKeyboardMarkup(
         [
-            InlineKeyboardButton("✅ Yes, Remove All", callback_data="multidb_confirm_rm_all"),
-            InlineKeyboardButton("❌ Cancel", callback_data="datadb_menu")
+            [
+                InlineKeyboardButton(
+                    "✅ Yes, Remove All", callback_data="multidb_confirm_rm_all"
+                ),
+                InlineKeyboardButton("❌ Cancel", callback_data="datadb_menu"),
+            ]
         ]
-    ])
+    )
     await query.message.edit_text(
         f"**⚠️ Are you sure you want to remove ALL ({len(client.db_urls)}) Database URLs?**\n\n"
         "__This action will clear all configured database URLs!__",
-        reply_markup=markup
+        reply_markup=markup,
     )
 
 
 @Client.on_callback_query(filters.regex("^multidb_confirm_rm_all$"))
 async def multidb_confirm_rm_all_cb(client: Client, query: CallbackQuery):
-    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
+    if (
+        query.from_user.id not in getattr(client, "admins", [])
+        and query.from_user.id != OWNER_ID
+    ):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -625,6 +733,7 @@ async def multidb_confirm_rm_all_cb(client: Client, query: CallbackQuery):
 #                DB CHANNELS & GENERAL COMMANDS                   #
 # =============================================================== #
 
+
 def _build_db_channels_dashboard(client):
     db_channels = getattr(client, "db_channels", {})
     primary_db = getattr(client, "primary_db_channel", client.db)
@@ -633,9 +742,15 @@ def _build_db_channels_dashboard(client):
         channel_list = []
         for channel_id_str, channel_data in db_channels.items():
             channel_name = channel_data.get("name", "ᴜɴᴋɴᴏᴡɴ")
-            is_primary = "✓ ᴘʀɪᴍᴀʀʏ" if channel_data.get("is_primary", False) else "• sᴇᴄᴏɴᴅᴀʀʏ"
-            is_active = "✓ ᴀᴄᴛɪᴠᴇ" if channel_data.get("is_active", True) else "✗ ɪɴᴀᴄᴛɪᴠᴇ"
-            channel_list.append(f"• `{channel_name}` (`{channel_id_str}`)\n  {is_primary} | {is_active}")
+            is_primary = (
+                "✓ ᴘʀɪᴍᴀʀʏ" if channel_data.get("is_primary", False) else "• sᴇᴄᴏɴᴅᴀʀʏ"
+            )
+            is_active = (
+                "✓ ᴀᴄᴛɪᴠᴇ" if channel_data.get("is_active", True) else "✗ ɪɴᴀᴄᴛɪᴠᴇ"
+            )
+            channel_list.append(
+                f"• `{channel_name}` (`{channel_id_str}`)\n  {is_primary} | {is_active}"
+            )
         channels_display = "\n\n".join(channel_list)
     else:
         channels_display = "_ɴᴏ ᴀᴅᴅɪᴛɪᴏɴᴀʟ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs ᴄᴏɴғɪɢᴜʀᴇᴅ_"
@@ -650,14 +765,16 @@ def _build_db_channels_dashboard(client):
 
 __ᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏᴜʀ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs!__"""
 
-    reply_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", "add_db_channel")],
-        [InlineKeyboardButton("›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", "rm_db_channel")],
-        [InlineKeyboardButton("›› sᴇᴛ ᴘʀɪᴍᴀʀʏ", "set_primary_db")],
-        [InlineKeyboardButton("›› ᴛᴏɢɢʟᴇ sᴛᴀᴛᴜs", "toggle_db_status")],
-        [InlineKeyboardButton("›› ᴠɪᴇᴡ ᴅᴇᴛᴀɪʟs", "db_details")],
-        [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", "settings")]
-    ])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton("›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", "add_db_channel")],
+            [InlineKeyboardButton("›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", "rm_db_channel")],
+            [InlineKeyboardButton("›› sᴇᴛ ᴘʀɪᴍᴀʀʏ", "set_primary_db")],
+            [InlineKeyboardButton("›› ᴛᴏɢɢʟᴇ sᴛᴀᴛᴜs", "toggle_db_status")],
+            [InlineKeyboardButton("›› ᴠɪᴇᴡ ᴅᴇᴛᴀɪʟs", "db_details")],
+            [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", "settings")],
+        ]
+    )
     return msg, reply_markup
 
 
@@ -705,9 +822,9 @@ async def db_details(client: Client, query: CallbackQuery):
     else:
         msg += "_ɴᴏ ᴀᴅᴅɪᴛɪᴏɴᴀʟ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs ᴄᴏɴғɪɢᴜʀᴇᴅ_\n\n"
 
-    reply_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ", "back_to_db_management")]
-    ])
+    reply_markup = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ", "back_to_db_management")]]
+    )
     await query.message.edit_text(msg, reply_markup=reply_markup)
 
 
@@ -738,22 +855,28 @@ async def quick_add_db(client: Client, message: Message):
     try:
         channel_id = int(args[1])
     except ValueError:
-        return await message.reply("**✗ ɪɴᴠᴀʟɪᴅ ᴄʜᴀɴɴᴇʟ ɪᴅ! ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ.**")
+        return await message.reply(
+            "**✗ ɪɴᴠᴀʟɪᴅ ᴄʜᴀɴɴᴇʟ ɪᴅ! ᴘʟᴇᴀsᴇ ᴘʀᴏᴠɪᴅᴇ ᴀ ᴠᴀʟɪᴅ ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ.**"
+        )
 
     db_channels = getattr(client, "db_channels", {})
     if str(channel_id) in db_channels:
-        return await message.reply(f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ᴀʟʀᴇᴀᴅʏ ᴀᴅᴅᴇᴅ ᴀs ᴀ ᴅʙ ᴄʜᴀɴɴᴇʟ!**")
+        return await message.reply(
+            f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ᴀʟʀᴇᴀᴅʏ ᴀᴅᴅᴇᴅ ᴀs ᴀ ᴅʙ ᴄʜᴀɴɴᴇʟ!**"
+        )
 
     try:
         chat = await client.get_chat(channel_id)
-        test_msg = await client.send_message(chat_id=channel_id, text="ᴛᴇsᴛɪɴɢ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss")
+        test_msg = await client.send_message(
+            chat_id=channel_id, text="ᴛᴇsᴛɪɴɢ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴀᴄᴄᴇss"
+        )
         await test_msg.delete()
 
         channel_data = {
             "name": chat.title,
             "is_primary": len(db_channels) == 0,
             "is_active": True,
-            "added_by": message.from_user.id
+            "added_by": message.from_user.id,
         }
 
         await client.mongodb.add_db_channel(channel_id, channel_data)
@@ -799,49 +922,71 @@ async def quick_remove_db(client: Client, message: Message):
 
     db_channels = getattr(client, "db_channels", {})
     if str(channel_id) not in db_channels:
-        return await message.reply(f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ɴᴏᴛ ɪɴ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ!**")
+        return await message.reply(
+            f"**✗ ᴄʜᴀɴɴᴇʟ `{channel_id}` ɪs ɴᴏᴛ ɪɴ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟs ʟɪsᴛ!**"
+        )
 
     if db_channels[str(channel_id)].get("is_primary", False) and len(db_channels) > 1:
-        return await message.reply("**✗ ᴄᴀɴɴᴏᴛ ʀᴇᴍᴏᴠᴇ ᴘʀɪᴍᴀʀʏ ᴄʜᴀɴɴᴇʟ! sᴇᴛ ᴀɴᴏᴛʜᴇʀ ᴄʜᴀɴɴᴇʟ ᴀs ᴘʀɪᴍᴀʀʏ ғɪʀsᴛ.**")
+        return await message.reply(
+            "**✗ ᴄᴀɴɴᴏᴛ ʀᴇᴍᴏᴠᴇ ᴘʀɪᴍᴀʀʏ ᴄʜᴀɴɴᴇʟ! sᴇᴛ ᴀɴᴏᴛʜᴇʀ ᴄʜᴀɴɴᴇʟ ᴀs ᴘʀɪᴍᴀʀʏ ғɪʀsᴛ.**"
+        )
 
     channel_name = db_channels[str(channel_id)].get("name", "ᴜɴᴋɴᴏᴡɴ")
     await client.mongodb.remove_db_channel(channel_id)
     del client.db_channels[str(channel_id)]
 
-    await message.reply(f"**✓ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟ ʀᴇᴍᴏᴠᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ:** `{channel_name}` (`{channel_id}`)")
+    await message.reply(
+        f"**✓ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟ ʀᴇᴍᴏᴠᴇᴅ sᴜᴄᴄᴇssғᴜʟʟʏ:** `{channel_name}` (`{channel_id}`)"
+    )
 
 
 @Client.on_callback_query(filters.regex("^home$"))
 async def home(client: Client, query: CallbackQuery):
-    buttons = [[InlineKeyboardButton("Help", callback_data="about"), InlineKeyboardButton("Close", callback_data="close")]]
+    buttons = [
+        [
+            InlineKeyboardButton("Help", callback_data="about"),
+            InlineKeyboardButton("Close", callback_data="close"),
+        ]
+    ]
     if query.from_user.id in client.admins or query.from_user.id == OWNER_ID:
-        buttons.insert(0, [InlineKeyboardButton("⛩️ ꜱᴇᴛᴛɪɴɢꜱ ⛩️", callback_data="settings")])
+        buttons.insert(
+            0, [InlineKeyboardButton("⛩️ ꜱᴇᴛᴛɪɴɢꜱ ⛩️", callback_data="settings")]
+        )
     await query.message.edit_text(
         text=client.messages.get("START", "No Start Message").format(
             first=query.from_user.first_name,
             last=query.from_user.last_name,
-            username=None if not query.from_user.username else "@" + query.from_user.username,
+            username=(
+                None if not query.from_user.username else "@" + query.from_user.username
+            ),
             mention=query.from_user.mention,
-            id=query.from_user.id
+            id=query.from_user.id,
         ),
-        reply_markup=InlineKeyboardMarkup(buttons)
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
 
 
 @Client.on_callback_query(filters.regex("^about$"))
 async def about(client: Client, query: CallbackQuery):
-    buttons = [[InlineKeyboardButton("Back", callback_data="home"), InlineKeyboardButton("Close", callback_data="close")]]
+    buttons = [
+        [
+            InlineKeyboardButton("Back", callback_data="home"),
+            InlineKeyboardButton("Close", callback_data="close"),
+        ]
+    ]
     await query.message.edit_text(
         text=client.messages.get("ABOUT", "No About Message").format(
             owner_id=client.owner,
             bot_username=client.username,
             first=query.from_user.first_name,
             last=query.from_user.last_name,
-            username=None if not query.from_user.username else "@" + query.from_user.username,
+            username=(
+                None if not query.from_user.username else "@" + query.from_user.username
+            ),
             mention=query.from_user.mention,
-            id=query.from_user.id
+            id=query.from_user.id,
         ),
-        reply_markup=InlineKeyboardMarkup(buttons)
+        reply_markup=InlineKeyboardMarkup(buttons),
     )
 
 
@@ -900,6 +1045,7 @@ async def unban(client: Client, message: Message):
 #                LINK GENERATOR HANDLERS                          #
 # =============================================================== #
 
+
 async def get_db_channels_info(client):
     db_channels = getattr(client, "db_channels", {})
     primary_db = getattr(client, "primary_db_channel", client.db)
@@ -917,16 +1063,24 @@ async def get_db_channels_info(client):
     channels_info = ["<blockquote>✦ ᴀᴠᴀɪʟᴀʙʟᴇ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs:</blockquote>"]
     for channel_id_str, channel_data in db_channels.items():
         channel_name = channel_data.get("name", "ᴜɴᴋɴᴏᴡɴ")
-        is_primary_text = "✦ ᴘʀɪᴍᴀʀʏ" if channel_data.get("is_primary", False) else "• sᴇᴄᴏɴᴅᴀʀʏ"
+        is_primary_text = (
+            "✦ ᴘʀɪᴍᴀʀʏ" if channel_data.get("is_primary", False) else "• sᴇᴄᴏɴᴅᴀʀʏ"
+        )
 
         try:
             chat = await client.get_chat(int(channel_id_str))
             if hasattr(chat, "invite_link") and chat.invite_link:
-                channels_info.append(f"{is_primary_text}: <a href='{chat.invite_link}'>{channel_name}</a>")
+                channels_info.append(
+                    f"{is_primary_text}: <a href='{chat.invite_link}'>{channel_name}</a>"
+                )
             else:
-                channels_info.append(f"{is_primary_text}: {channel_name} (`{channel_id_str}`)")
+                channels_info.append(
+                    f"{is_primary_text}: {channel_name} (`{channel_id_str}`)"
+                )
         except Exception:
-            channels_info.append(f"{is_primary_text}: {channel_name} (`{channel_id_str}`)")
+            channels_info.append(
+                f"{is_primary_text}: {channel_name} (`{channel_id_str}`)"
+            )
 
     return "\n".join(channels_info)
 
@@ -947,7 +1101,7 @@ async def batch(client: Client, message: Message):
 <blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
                 chat_id=message.from_user.id,
                 filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60
+                timeout=60,
             )
         except Exception:
             return
@@ -957,7 +1111,7 @@ async def batch(client: Client, message: Message):
         else:
             await first_message.reply(
                 "<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ɴᴏᴛ ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ",
-                quote=True
+                quote=True,
             )
             continue
 
@@ -970,7 +1124,7 @@ async def batch(client: Client, message: Message):
 <blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
                 chat_id=message.from_user.id,
                 filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60
+                timeout=60,
             )
         except Exception:
             return
@@ -980,18 +1134,28 @@ async def batch(client: Client, message: Message):
         else:
             await second_message.reply(
                 "<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ɴᴏᴛ ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ",
-                quote=True
+                quote=True,
             )
             continue
 
-    string_val = f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    string_val = (
+        f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    )
     base64_string = await encode(string_val)
     link = f"https://t.me/{client.username}?start={base64_string}"
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 sʜᴀʀᴇ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}")]])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔁 sʜᴀʀᴇ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}"
+                )
+            ]
+        ]
+    )
     await second_message.reply_text(
         f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʙᴀᴛᴄʜ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>",
         quote=True,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
     )
 
 
@@ -1012,7 +1176,7 @@ async def link_generator(client: Client, message: Message):
 <blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
                 chat_id=message.from_user.id,
                 filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60
+                timeout=60,
             )
         except Exception:
             return
@@ -1022,17 +1186,25 @@ async def link_generator(client: Client, message: Message):
         else:
             await channel_message.reply(
                 "<blockquote>✗ ᴇʀʀᴏʀ</blockquote>\n\nᴛʜɪs ꜰᴏʀᴡᴀʀᴅᴇᴅ ᴘᴏsᴛ ɪs ɴᴏᴛ ꜰʀᴏᴍ ᴍʏ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴏʀ ᴛʜɪs ʟɪɴᴋ ɪs ɴᴏᴛ ᴛᴀᴋᴇɴ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ",
-                quote=True
+                quote=True,
             )
             continue
 
     base64_string = await encode(f"get-{msg_id * abs(source_channel_id)}")
     link = f"https://t.me/{client.username}?start={base64_string}"
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 sʜᴀʀᴇ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}")]])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔁 sʜᴀʀᴇ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}"
+                )
+            ]
+        ]
+    )
     await channel_message.reply_text(
         f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>",
         quote=True,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
     )
 
 
@@ -1043,7 +1215,9 @@ async def nbatch(client: Client, message: Message):
 
     args = message.text.split()
     if len(args) < 2 or not args[1].isdigit():
-        await message.reply("<blockquote>✗ ɪɴᴠᴀʟɪᴅ ꜰᴏʀᴍᴀᴛ!</blockquote> ᴜsᴇ: `/nbatch {number}`")
+        await message.reply(
+            "<blockquote>✗ ɪɴᴠᴀʟɪᴅ ꜰᴏʀᴍᴀᴛ!</blockquote> ᴜsᴇ: `/nbatch {number}`"
+        )
         return
 
     batch_size = int(args[1])
@@ -1057,7 +1231,7 @@ async def nbatch(client: Client, message: Message):
 {db_channels_info}""",
                 chat_id=message.from_user.id,
                 filters=(filters.text & ~filters.forwarded),
-                timeout=60
+                timeout=60,
             )
         except Exception:
             return
@@ -1066,28 +1240,40 @@ async def nbatch(client: Client, message: Message):
         if f_msg_id:
             break
         else:
-            await first_message.reply("<blockquote>😫 ɪɴᴠᴀʟɪᴅ!</blockquote> sᴇɴᴅ ᴄᴏʀʀᴇᴄᴛ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴍᴇssᴀɢᴇ ʟɪɴᴋ.", quote=True)
+            await first_message.reply(
+                "<blockquote>😫 ɪɴᴠᴀʟɪᴅ!</blockquote> sᴇɴᴅ ᴄᴏʀʀᴇᴄᴛ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴍᴇssᴀɢᴇ ʟɪɴᴋ.",
+                quote=True,
+            )
             continue
 
     s_msg_id = f_msg_id + batch_size - 1
-    string_val = f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    string_val = (
+        f"get-{f_msg_id * abs(source_channel_id)}-{s_msg_id * abs(source_channel_id)}"
+    )
     base64_string = await encode(string_val)
     link = f"https://t.me/{client.username}?start={base64_string}"
 
-    reply_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📫 ʏᴏᴜʀ ʙᴀᴛᴄʜ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}")]
-    ])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "📫 ʏᴏᴜʀ ʙᴀᴛᴄʜ ᴜʀʟ", url=f"https://telegram.me/share/url?url={link}"
+                )
+            ]
+        ]
+    )
 
     await first_message.reply_text(
         f"<blockquote>✓ ʜᴇʀᴇ ɪs ʏᴏᴜʀ ʙᴀᴛᴄʜ ʟɪɴᴋ</blockquote>\n\n<code>{link}</code>",
         quote=True,
-        reply_markup=reply_markup
+        reply_markup=reply_markup,
     )
 
 
 # =============================================================== #
 #                CHANNEL POST HANDLERS                            #
 # =============================================================== #
+
 
 def generate_random_id(length: int = 8) -> str:
     alphabet = string.ascii_letters + string.digits
@@ -1104,18 +1290,46 @@ not_numeric_filter = filters.create(is_not_numeric_reply)
 
 
 @Client.on_message(
-    filters.private &
-    ~filters.command([
-        "start", "users", "broadcast", "batch", "genlink", "nbatch",
-        "usage", "stats", "pbroadcast", "ban", "unban", "db", "dbchannels",
-        "adddb", "add_db", "removedb", "rm_db", "datadb", "forcesub",
-        "bots", "otherbots", "settings", "request", "profile",
-        "addpremium", "delpremium", "premiumusers"
-    ]) &
-    not_numeric_filter
+    filters.private
+    & ~filters.command(
+        [
+            "start",
+            "users",
+            "broadcast",
+            "batch",
+            "genlink",
+            "nbatch",
+            "usage",
+            "stats",
+            "pbroadcast",
+            "ban",
+            "unban",
+            "db",
+            "dbchannels",
+            "adddb",
+            "add_db",
+            "removedb",
+            "rm_db",
+            "datadb",
+            "forcesub",
+            "bots",
+            "otherbots",
+            "settings",
+            "request",
+            "profile",
+            "addpremium",
+            "delpremium",
+            "premiumusers",
+        ]
+    )
+    & not_numeric_filter
 )
 async def channel_post(client: Client, message: Message):
-    if hasattr(client, "admins") and message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
+    if (
+        hasattr(client, "admins")
+        and message.from_user.id not in client.admins
+        and message.from_user.id != OWNER_ID
+    ):
         text = getattr(client, "reply_text", "You are not authorized.")
         return await message.reply(text)
 
@@ -1130,19 +1344,29 @@ async def channel_post(client: Client, message: Message):
         post_message = await message.copy(chat_id=target_db, disable_notification=True)
     except Exception as e:
         client.LOGGER(__name__, client.name).error(f"Copying file to DB failed: {e}")
-        return await reply_text.edit_text("Something went wrong. Could not save the file.")
+        return await reply_text.edit_text(
+            "Something went wrong. Could not save the file."
+        )
 
     file_id = generate_random_id()
     await client.mongodb.add_file(file_id, post_message.id, channel_id=target_db)
 
     link = f"https://t.me/{client.username}?start={file_id}"
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔁 Share URL", url=f"https://telegram.me/share/url?url={link}"
+                )
+            ]
+        ]
+    )
 
     await reply_text.edit(
         f"<b>ʜᴇʀᴇ ɪꜱ ʏᴏᴜʀ ʟɪɴᴋ :</b>\n\n<code>{link}</code>",
         reply_markup=reply_markup,
         disable_web_page_preview=True,
-        parse_mode=ParseMode.HTML
+        parse_mode=ParseMode.HTML,
     )
 
     if not getattr(client, "disable_btn", False):
@@ -1165,7 +1389,15 @@ async def new_post(client: Client, message: Message):
     await client.mongodb.add_file(file_id, message.id, channel_id=message.chat.id)
 
     link = f"https://t.me/{client.username}?start={file_id}"
-    reply_markup = InlineKeyboardMarkup([[InlineKeyboardButton("🔁 Share URL", url=f"https://telegram.me/share/url?url={link}")]])
+    reply_markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔁 Share URL", url=f"https://telegram.me/share/url?url={link}"
+                )
+            ]
+        ]
+    )
 
     try:
         await message.edit_reply_markup(reply_markup)

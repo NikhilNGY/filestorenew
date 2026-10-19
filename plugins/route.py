@@ -1,4 +1,5 @@
 import os
+
 import markdown
 from aiohttp import web
 
@@ -13,15 +14,15 @@ async def root_route_handler(request):
 
     if not os.path.exists(readme_path):
         return web.Response(
-            text="FileStore Bot v2.0 is running!",
-            content_type="text/plain",
-            status=200
+            text="FileStore Bot v2.0 is running!", content_type="text/plain", status=200
         )
 
     with open(readme_path, "r", encoding="utf-8") as f:
         md_text = f.read()
 
-    html = markdown.markdown(md_text, extensions=["fenced_code", "codehilite", "tables"])
+    html = markdown.markdown(
+        md_text, extensions=["fenced_code", "codehilite", "tables"]
+    )
 
     html_page = f"""<!DOCTYPE html>
 <html lang="en">
