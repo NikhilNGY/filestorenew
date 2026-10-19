@@ -127,7 +127,7 @@ async def remove_admins(client: Client, query: CallbackQuery):
 
 @Client.on_message(filters.command(["stats", "usage"]))
 async def usage_cmd(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply("✗ ᴛʜɪs ᴄᴀɴ ᴏɴʟʏ ʙᴇ ᴜsᴇᴅ ʙʏ ᴀᴅᴍɪɴs!")
 
     reply = await message.reply("<blockquote>›› ᴇxᴛʀᴀᴄᴛɪɴɢ ᴜsᴀɢᴇ ᴅᴀᴛᴀ...</blockquote>")
@@ -246,15 +246,15 @@ async def usage_cmd(client: Client, message: Message):
 
 @Client.on_message(filters.command("users"))
 async def user_count(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(getattr(client, "reply_text", "You are not authorized."))
     total_users = await client.mongodb.full_userbase()
     await message.reply(f"**{len(total_users)} Users are using this bot currently!**")
 
 
 async def _execute_broadcast(client: Client, message: Message, pin: bool = False):
-    """Unified, high-efficiency broadcast engine for standard and pinned broadcasts"""
-    if message.from_user.id not in client.admins:
+    """Unified, high-efficiency broadcast engine for standard and pinned broadcasts."""
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(getattr(client, "reply_text", "You are not authorized."))
 
     if not message.reply_to_message:
@@ -337,7 +337,7 @@ async def pin_bdcst_text(client: Client, message: Message):
 # =============================================================== #
 
 def ensure_multidb_attrs(client):
-    """Ensure client has multi-database attributes initialized (Unlimited DBs)"""
+    """Ensure client has multi-database attributes initialized (Unlimited DBs)."""
     if not hasattr(client, "multi_db_enabled"):
         client.multi_db_enabled = True
     if not hasattr(client, "db_urls"):
@@ -345,7 +345,7 @@ def ensure_multidb_attrs(client):
 
 
 def get_datadb_main_menu(client):
-    """Generate text and buttons for the main /datadb menu"""
+    """Generate text and buttons for the main /datadb menu."""
     ensure_multidb_attrs(client)
 
     on_text = "🟢 On ✓" if client.multi_db_enabled else "On"
@@ -381,8 +381,8 @@ __Use the buttons below to manage your Multi-Database URLs and settings!__"""
 
 @Client.on_message(filters.command("datadb") & filters.private)
 async def datadb_command(client: Client, message: Message):
-    """Handle /datadb command to display the Multi Database interactive panel"""
-    if hasattr(client, "admins") and message.from_user.id not in client.admins:
+    """Handle /datadb command to display the Multi Database interactive panel."""
+    if message.from_user.id not in getattr(client, "admins", []) and message.from_user.id != OWNER_ID:
         return await message.reply(getattr(client, "reply_text", "**⚠️ You are not authorized to use this command!**"))
 
     msg, reply_markup = get_datadb_main_menu(client)
@@ -391,8 +391,8 @@ async def datadb_command(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^datadb_menu$"))
 async def datadb_menu_cb(client: Client, query: CallbackQuery):
-    """Return to or refresh the main /datadb menu"""
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    """Return to or refresh the main /datadb menu."""
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     msg, reply_markup = get_datadb_main_menu(client)
@@ -404,8 +404,8 @@ async def datadb_menu_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_(on|off)$"))
 async def multidb_toggle_cb(client: Client, query: CallbackQuery):
-    """Switch Multi Database On or Off"""
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    """Switch Multi Database On or Off."""
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -420,8 +420,8 @@ async def multidb_toggle_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_add$"))
 async def multidb_add_cb(client: Client, query: CallbackQuery):
-    """Add an unlimited number of Database URLs"""
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    """Add an unlimited number of Database URLs."""
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -475,7 +475,7 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_list$"))
 async def multidb_list_cb(client: Client, query: CallbackQuery):
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -520,7 +520,7 @@ async def multidb_info_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_del_(.+)$"))
 async def multidb_del_single_cb(client: Client, query: CallbackQuery):
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -547,7 +547,7 @@ async def multidb_del_single_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_rm_prompt$"))
 async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -587,7 +587,7 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_rm_all$"))
 async def multidb_rm_all_cb(client: Client, query: CallbackQuery):
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -610,7 +610,7 @@ async def multidb_rm_all_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^multidb_confirm_rm_all$"))
 async def multidb_confirm_rm_all_cb(client: Client, query: CallbackQuery):
-    if hasattr(client, "admins") and query.from_user.id not in client.admins:
+    if query.from_user.id not in getattr(client, "admins", []) and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     ensure_multidb_attrs(client)
@@ -663,7 +663,7 @@ __ᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏ
 
 @Client.on_message(filters.command(["db", "dbchannels"]) & filters.private)
 async def db_channels_command(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     msg, reply_markup = _build_db_channels_dashboard(client)
@@ -672,7 +672,7 @@ async def db_channels_command(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^db_details$"))
 async def db_details(client: Client, query: CallbackQuery):
-    if query.from_user.id not in client.admins:
+    if query.from_user.id not in client.admins and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     await query.answer()
@@ -713,7 +713,7 @@ async def db_details(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^back_to_db_management$"))
 async def back_to_db_management(client: Client, query: CallbackQuery):
-    if query.from_user.id not in client.admins:
+    if query.from_user.id not in client.admins and query.from_user.id != OWNER_ID:
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     await query.answer()
@@ -723,7 +723,7 @@ async def back_to_db_management(client: Client, query: CallbackQuery):
 
 @Client.on_message(filters.command(["adddb", "add_db"]) & filters.private)
 async def quick_add_db(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     args = message.text.split()
@@ -776,7 +776,7 @@ async def quick_add_db(client: Client, message: Message):
 
 @Client.on_message(filters.command(["removedb", "rm_db"]) & filters.private)
 async def quick_remove_db(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     args = message.text.split()
@@ -814,7 +814,7 @@ async def quick_remove_db(client: Client, message: Message):
 @Client.on_callback_query(filters.regex("^home$"))
 async def home(client: Client, query: CallbackQuery):
     buttons = [[InlineKeyboardButton("Help", callback_data="about"), InlineKeyboardButton("Close", callback_data="close")]]
-    if query.from_user.id in client.admins:
+    if query.from_user.id in client.admins or query.from_user.id == OWNER_ID:
         buttons.insert(0, [InlineKeyboardButton("⛩️ ꜱᴇᴛᴛɪɴɢꜱ ⛩️", callback_data="settings")])
     await query.message.edit_text(
         text=client.messages.get("START", "No Start Message").format(
@@ -856,14 +856,14 @@ async def close(client: Client, query: CallbackQuery):
 
 @Client.on_message(filters.command("ban"))
 async def ban(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
     try:
         user_ids = message.text.split(maxsplit=1)[1]
         c = 0
         for user_id in user_ids.split():
             user_id = int(user_id)
-            if user_id in client.admins:
+            if user_id in client.admins or user_id == OWNER_ID:
                 continue
             if not await client.mongodb.present_user(user_id):
                 await client.mongodb.add_user(user_id, True)
@@ -877,14 +877,14 @@ async def ban(client: Client, message: Message):
 
 @Client.on_message(filters.command("unban"))
 async def unban(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
     try:
         user_ids = message.text.split(maxsplit=1)[1]
         c = 0
         for user_id in user_ids.split():
             user_id = int(user_id)
-            if user_id in client.admins:
+            if user_id in client.admins or user_id == OWNER_ID:
                 continue
             if not await client.mongodb.present_user(user_id):
                 await client.mongodb.add_user(user_id)
@@ -933,7 +933,7 @@ async def get_db_channels_info(client):
 
 @Client.on_message(filters.private & filters.command("batch"))
 async def batch(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     db_channels_info = await get_db_channels_info(client)
@@ -997,7 +997,7 @@ async def batch(client: Client, message: Message):
 
 @Client.on_message(filters.private & filters.command("genlink"))
 async def link_generator(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     db_channels_info = await get_db_channels_info(client)
@@ -1038,7 +1038,7 @@ async def link_generator(client: Client, message: Message):
 
 @Client.on_message(filters.private & filters.command("nbatch"))
 async def nbatch(client: Client, message: Message):
-    if message.from_user.id not in client.admins:
+    if message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         return await message.reply(client.reply_text)
 
     args = message.text.split()
@@ -1115,7 +1115,7 @@ not_numeric_filter = filters.create(is_not_numeric_reply)
     not_numeric_filter
 )
 async def channel_post(client: Client, message: Message):
-    if hasattr(client, "admins") and message.from_user.id not in client.admins:
+    if hasattr(client, "admins") and message.from_user.id not in client.admins and message.from_user.id != OWNER_ID:
         text = getattr(client, "reply_text", "You are not authorized.")
         return await message.reply(text)
 
