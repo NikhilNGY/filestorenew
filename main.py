@@ -1,22 +1,24 @@
 import asyncio
+
 import pyromod.listen  # Ensures client.ask() and client.listen() work across all plugins
 from pyrogram import compose
+
 from bot import Bot, web_app
 from config import (
-    SESSION,
-    WORKERS,
-    DB_CHANNEL,
-    FSUBS,
-    TOKEN,
     ADMINS,
-    MESSAGES,
-    AUTO_DEL,
-    DB_URI,
-    DB_NAME,
-    API_ID,
     API_HASH,
+    API_ID,
+    AUTO_DEL,
+    DB_CHANNEL,
+    DB_NAME,
+    DB_URI,
+    DISABLE_BTN,
+    FSUBS,
+    MESSAGES,
     PROTECT,
-    DISABLE_BTN
+    SESSION,
+    TOKEN,
+    WORKERS,
 )
 
 
@@ -36,17 +38,14 @@ async def main():
             api_id=API_ID,
             api_hash=API_HASH,
             protect=PROTECT,
-            disable_btn=DISABLE_BTN
+            disable_btn=DISABLE_BTN,
         )
     ]
     await compose(app)
 
 
 async def runner():
-    await asyncio.gather(
-        main(),
-        web_app()
-    )
+    await asyncio.gather(main(), web_app())
 
 
 if __name__ == "__main__":
