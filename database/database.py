@@ -3,17 +3,14 @@ import re
 import asyncio
 import urllib.parse
 import aiohttp
-import requests
 import motor.motor_asyncio
 from datetime import datetime, timedelta
-from pyrogram import filters, Client, errors
+from pyrogram import Client, errors
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.enums import ChatMemberStatus
 from pyrogram.errors import (
     UserNotParticipant,
     Forbidden,
-    PeerIdInvalid,
-    ChatAdminRequired,
     FloodWait
 )
 
@@ -53,7 +50,7 @@ class MongoDB:
     # --------------------------------------------------------------- #
 
     def _connect_secondary_db(self, entry: dict):
-        """Initialize a Motor client for a secondary MongoDB URL entry"""
+        """Initialize a Motor client for a secondary MongoDB URL entry."""
         db_id = entry.get("id")
         url = entry.get("url")
         if not db_id or not url:
@@ -77,7 +74,7 @@ class MongoDB:
         return self.secondary_clients.get(db_id)
 
     async def init_multi_db(self, bot_client=None):
-        """Load saved /datadb settings and URLs from primary DB on startup"""
+        """Load saved /datadb settings and URLs from primary DB on startup."""
         status = await self.get_multi_db_status()
         urls = await self.get_db_urls()
         self.multi_db_enabled = status
@@ -89,7 +86,7 @@ class MongoDB:
         return status, urls
 
     async def set_multi_db_status(self, enabled: bool):
-        """Save /datadb On/Off status"""
+        """Save /datadb On/Off status."""
         self.multi_db_enabled = bool(enabled)
         await self.user_data.update_one(
             {"_id": "multidb_config"},
@@ -98,14 +95,14 @@ class MongoDB:
         )
 
     async def get_multi_db_status(self) -> bool:
-        """Get /datadb On/Off status"""
+        """Get /datadb On/Off status."""
         doc = await self.user_data.find_one({"_id": "multidb_config"})
         if doc and "enabled" in doc:
             self.multi_db_enabled = bool(doc["enabled"])
         return self.multi_db_enabled
 
     async def get_db_urls(self) -> list[dict]:
-        """Get all configured unlimited database URLs"""
+        """Get all configured unlimited database URLs."""
         doc = await self.user_data.find_one({"_id": "multidb_config"})
         urls = doc.get("urls", []) if doc else []
         for entry in urls:
@@ -113,7 +110,7 @@ class MongoDB:
         return urls
 
     async def set_db_urls(self, urls: list[dict]):
-        """Overwrite the full list of configured database URLs"""
+        """Overwrite the full list of configured database URLs."""
         await self.user_data.update_one(
             {"_id": "multidb_config"},
             {"$set": {"urls": urls}},
@@ -127,7 +124,7 @@ class MongoDB:
             self._connect_secondary_db(entry)
 
     async def add_db_url(self, entry: dict):
-        """Add a new MongoDB URL from /datadb and connect it immediately"""
+        """Add a new MongoDB URL from /datadb and connect it immediately."""
         urls = await self.get_db_urls()
         if not any(u.get("url") == entry.get("url") for u in urls):
             urls.append(entry)
@@ -136,7 +133,7 @@ class MongoDB:
         return True
 
     async def remove_db_url(self, db_id: str):
-        """Remove a specific MongoDB URL by its short ID or name"""
+        """Remove a specific MongoDB URL by its short ID, name, or URL."""
         urls = await self.get_db_urls()
         updated_urls = [
             u for u in urls
@@ -147,7 +144,7 @@ class MongoDB:
         return True
 
     async def clear_all_db_urls(self):
-        """Remove all configured MongoDB URLs from /datadb"""
+        """Remove all configured MongoDB URLs from /datadb."""
         await self.set_db_urls([])
         self.secondary_clients.clear()
         return True
@@ -165,7 +162,7 @@ class MongoDB:
         await self.update_bot_setting(key, value)
 
     async def get_worker_bots(self) -> list[dict]:
-        """Return list of all connected worker bots"""
+        """Return list of all connected worker bots."""
         cursor = self.worker_bots.find({})
         bots = []
         async for doc in cursor:
@@ -179,7 +176,7 @@ class MongoDB:
         return bots
 
     async def add_worker_bot(self, bot_id: int, token: str, username: str, name: str = "Worker Bot"):
-        """Add or update a worker bot in MongoDB"""
+        """Add or update a worker bot in MongoDB."""
         await self.worker_bots.update_one(
             {"_id": int(bot_id)},
             {"$set": {
@@ -193,22 +190,22 @@ class MongoDB:
         return True
 
     async def remove_worker_bot(self, bot_id: int):
-        """Remove a specific worker bot by bot_id"""
+        """Remove a specific worker bot by bot_id."""
         await self.worker_bots.delete_one({"_id": int(bot_id)})
         return True
 
     async def clear_all_worker_bots(self):
-        """Remove all worker bots"""
+        """Remove all worker bots."""
         await self.worker_bots.delete_many({})
         return True
 
     async def get_otherbots_config(self) -> dict:
-        """Fetch /otherbots universal reply configuration"""
+        """Fetch /otherbots universal reply configuration."""
         doc = await self.user_data.find_one({"_id": "otherbots_config"})
         return doc.get("config", {}) if doc else {}
 
     async def update_otherbots_config(self, updates: dict):
-        """Update /otherbots universal reply configuration"""
+        """Update /otherbots universal reply configuration."""
         current = await self.get_otherbots_config()
         current.update(updates)
         await self.user_data.update_one(
@@ -255,7 +252,7 @@ class MongoDB:
         return True
 
     async def get_file(self, file_id: str) -> dict:
-        """Retrieve file metadata from primary DB or any connected /datadb instance"""
+        """Retrieve file metadata from primary DB or any connected /datadb instance."""
         doc = await self.files_data.find_one({"_id": file_id})
         if doc:
             return doc
@@ -287,24 +284,24 @@ class MongoDB:
 
     async def add_channel_user(self, channel_id: int, user_id: int):
         await self.channel_data.update_one(
-            {"_id": channel_id},
+            {"_id": int(channel_id)},
             {"$addToSet": {"users": user_id}},
             upsert=True
         )
 
     async def remove_channel_user(self, channel_id: int, user_id: int):
         await self.channel_data.update_one(
-            {"_id": channel_id},
+            {"_id": int(channel_id)},
             {"$pull": {"users": user_id}}
         )
 
     async def get_channel_users(self, channel_id: int) -> list[int]:
-        doc = await self.channel_data.find_one({"_id": channel_id})
+        doc = await self.channel_data.find_one({"_id": int(channel_id)})
         return doc.get("users", []) if doc else []
 
     async def is_user_in_channel(self, channel_id: int, user_id: int) -> bool:
         doc = await self.channel_data.find_one(
-            {"_id": channel_id, "users": {"$in": [user_id]}},
+            {"_id": int(channel_id), "users": {"$in": [user_id]}},
             {"_id": 1}
         )
         return doc is not None
@@ -333,7 +330,7 @@ class MongoDB:
             print(f"Failed to remove premium user: {e}")
             return False
 
-    async def is_pro(self, user_id: int):
+    async def is_pro(self, user_id: int) -> bool:
         doc = await self.premium_users.find_one({"_id": user_id})
         if not doc:
             return False
@@ -341,7 +338,7 @@ class MongoDB:
             return True
         return doc["expiry_date"] > datetime.now()
 
-    async def get_pros_list(self):
+    async def get_pros_list(self) -> list[int]:
         current_time = datetime.now()
         cursor = self.premium_users.find({
             "$or": [
@@ -392,7 +389,7 @@ class MongoDB:
                 pass
 
     async def full_userbase(self) -> list[int]:
-        """Return all valid integer user IDs across primary and secondary DBs"""
+        """Return all valid integer user IDs across primary and secondary DBs."""
         user_ids = set()
         cursor = self.user_data.find()
         async for doc in cursor:
@@ -445,23 +442,26 @@ class MongoDB:
         return await self.get_bot_setting("auto_rotate", False)
 
     async def set_fsub_channels(self, fsub_data: dict):
+        normalized = {str(k): v for k, v in fsub_data.items()}
         await self.user_data.update_one(
             {"_id": "fsub_channels"},
-            {"$set": {"channels": fsub_data}},
+            {"$set": {"channels": normalized}},
             upsert=True
         )
 
     async def get_fsub_channels(self) -> dict:
         data = await self.user_data.find_one({"_id": "fsub_channels"})
-        return data.get("channels", {}) if data else {}
+        raw_channels = data.get("channels", {}) if data else {}
+        return {int(k) if str(k).lstrip("-").isdigit() else k: v for k, v in raw_channels.items()}
 
     async def add_fsub_channel(self, channel_id: int, channel_data: list):
         current_data = await self.get_fsub_channels()
-        current_data[str(channel_id)] = channel_data
+        current_data[int(channel_id)] = channel_data
         await self.set_fsub_channels(current_data)
 
     async def remove_fsub_channel(self, channel_id: int):
         current_data = await self.get_fsub_channels()
+        current_data.pop(int(channel_id), None)
         current_data.pop(str(channel_id), None)
         await self.set_fsub_channels(current_data)
 
@@ -498,17 +498,17 @@ class MongoDB:
 
     async def update_fsub_status(self, user_id: int, channel_id: int, status: str):
         await self.fsub_status.update_one(
-            {"user_id": user_id, "channel_id": channel_id},
+            {"user_id": user_id, "channel_id": int(channel_id)},
             {"$set": {"status": status, "last_updated": datetime.now()}},
             upsert=True
         )
 
     async def get_fsub_status(self, user_id: int, channel_id: int) -> str:
-        doc = await self.fsub_status.find_one({"user_id": user_id, "channel_id": channel_id})
+        doc = await self.fsub_status.find_one({"user_id": user_id, "channel_id": int(channel_id)})
         return doc.get("status") if doc else None
 
     async def remove_fsub_status(self, user_id: int, channel_id: int):
-        await self.fsub_status.delete_one({"user_id": user_id, "channel_id": channel_id})
+        await self.fsub_status.delete_one({"user_id": user_id, "channel_id": int(channel_id)})
 
     async def get_user_fsub_statuses(self, user_id: int) -> dict:
         cursor = self.fsub_status.find({"user_id": user_id})
@@ -523,7 +523,7 @@ class MongoDB:
 
     async def add_join_request(self, user_id: int, channel_id: int, request_id: int = None):
         await self.request_sub.update_one(
-            {"user_id": user_id, "channel_id": channel_id},
+            {"user_id": user_id, "channel_id": int(channel_id)},
             {"$set": {
                 "request_id": request_id,
                 "status": "pending",
@@ -535,20 +535,20 @@ class MongoDB:
 
     async def update_join_request_status(self, user_id: int, channel_id: int, status: str):
         await self.request_sub.update_one(
-            {"user_id": user_id, "channel_id": channel_id},
+            {"user_id": user_id, "channel_id": int(channel_id)},
             {"$set": {"status": status, "last_updated": datetime.now()}}
         )
 
     async def get_join_request_status(self, user_id: int, channel_id: int) -> str:
-        doc = await self.request_sub.find_one({"user_id": user_id, "channel_id": channel_id})
+        doc = await self.request_sub.find_one({"user_id": user_id, "channel_id": int(channel_id)})
         return doc.get("status") if doc else None
 
     async def has_submitted_join_request(self, user_id: int, channel_id: int) -> bool:
-        doc = await self.request_sub.find_one({"user_id": user_id, "channel_id": channel_id})
+        doc = await self.request_sub.find_one({"user_id": user_id, "channel_id": int(channel_id)})
         return doc is not None
 
     async def remove_join_request(self, user_id: int, channel_id: int):
-        await self.request_sub.delete_one({"user_id": user_id, "channel_id": channel_id})
+        await self.request_sub.delete_one({"user_id": user_id, "channel_id": int(channel_id)})
 
     # --------------------------------------------------------------- #
     #                  DB CHANNELS MANAGEMENT FUNCTIONS               #
@@ -688,8 +688,8 @@ class MongoDB:
 #                ASYNC SHORTENER HELPER FUNCTION                  #
 # =============================================================== #
 
-async def get_short(url: str, client) -> str:
-    """Non-blocking URL shortener using aiohttp (with fallback to requests)."""
+async def get_short(url: str, client: Client) -> str:
+    """Non-blocking URL shortener using aiohttp."""
     short_url = getattr(client, "short_url", None)
     short_api = getattr(client, "short_api", None)
     if not short_url or not short_api:
@@ -724,9 +724,10 @@ async def decode(base64_string: str) -> str:
     return string_bytes.decode("ascii")
 
 
-async def get_messages(client, message_ids):
+async def get_messages(client: Client, message_ids: list):
     messages = []
     total_messages = 0
+    message_ids = list(message_ids)
     while total_messages != len(message_ids):
         temb_ids = message_ids[total_messages:total_messages + 200]
         msgs = []
@@ -743,8 +744,8 @@ async def get_messages(client, message_ids):
     return messages
 
 
-async def get_message_id(client, message):
-    """Get message ID and source channel ID from forwarded message or link"""
+async def get_message_id(client: Client, message: Message):
+    """Get message ID and source channel ID from forwarded message or link."""
     if message.forward_from_chat:
         if message.forward_from_chat.id == client.db:
             return message.forward_from_message_id, client.db
@@ -757,7 +758,7 @@ async def get_message_id(client, message):
         return 0, 0
     elif message.text:
         pattern = r"https://t.me/(?:c/)?(.*)/(\d+)"
-        matches = re.match(pattern, message.text)
+        matches = re.match(pattern, message.text.strip())
         if not matches:
             return 0, 0
         channel_id = matches.group(1)
@@ -770,7 +771,7 @@ async def get_message_id(client, message):
                 if f"-100{channel_id}" == channel_id_str:
                     return msg_id, int(channel_id_str)
         else:
-            if hasattr(client, "db_channel") and channel_id == client.db_channel.username:
+            if hasattr(client, "db_channel") and client.db_channel and channel_id == client.db_channel.username:
                 return msg_id, client.db
             db_channels = getattr(client, "db_channels", {})
             for channel_id_str in db_channels.keys():
@@ -783,8 +784,8 @@ async def get_message_id(client, message):
     return 0, 0
 
 
-async def get_messages_from_db_channels(client, temb_ids):
-    """Get messages from multiple DB channels - tries primary first, then falls back to others"""
+async def get_messages_from_db_channels(client: Client, temb_ids: list):
+    """Get messages from multiple DB channels - tries primary first, then falls back to others."""
     messages = []
     try:
         primary_db = getattr(client, "primary_db_channel", client.db)
@@ -839,9 +840,9 @@ async def get_messages_from_db_channels(client, temb_ids):
 #                ADMIN & FORCE SUBSCRIBE CHECK HELPERS            #
 # =============================================================== #
 
-async def is_bot_admin(client, channel_id):
+async def is_bot_admin(client: Client, channel_id: int):
     try:
-        bot = await client.get_chat_member(channel_id, "me")
+        bot = await client.get_chat_member(int(channel_id), "me")
         if bot.status in (ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER):
             if bot.privileges:
                 required_rights = ["can_invite_users", "can_delete_messages"]
@@ -856,7 +857,7 @@ async def is_bot_admin(client, channel_id):
         return False, f"Unexpected error: {str(e)}"
 
 
-async def check_subscription(client, user_id):
+async def check_subscription(client: Client, user_id: int):
     """Enhanced subscription check with request channel and auto-rotate support."""
     if not getattr(client, "fsub_enabled", True):
         return {}
@@ -865,7 +866,8 @@ async def check_subscription(client, user_id):
     if not await client.mongodb.present_user(user_id):
         await client.mongodb.add_user(user_id)
 
-    for channel_id, (channel_name, channel_link, request, timer) in client.fsub_dict.items():
+    for raw_channel_id, (channel_name, channel_link, request, timer) in client.fsub_dict.items():
+        channel_id = int(raw_channel_id)
         try:
             user = await client.get_chat_member(channel_id, user_id)
             actual_status = user.status
@@ -924,7 +926,7 @@ async def check_subscription(client, user_id):
     return statuses
 
 
-def is_user_subscribed(statuses):
+def is_user_subscribed(statuses: dict) -> bool:
     """Check if user is subscribed to all channels."""
     return all(
         status in {ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER}
@@ -959,7 +961,8 @@ def force_sub(func):
             offset = int(datetime.now().timestamp()) % len(fsub_items)
             fsub_items = fsub_items[offset:] + fsub_items[:offset]
 
-        for channel_id, (channel_name, channel_link, request, timer) in fsub_items:
+        for raw_channel_id, (channel_name, channel_link, request, timer) in fsub_items:
+            channel_id = int(raw_channel_id)
             status = statuses.get(channel_id, None)
 
             if timer > 0:
@@ -1034,8 +1037,15 @@ def convert_time(duration_seconds: int) -> str:
         return ", ".join(parts[:-1]) + " ᴀɴᴅ " + parts[-1]
 
 
-async def batch_auto_del_notification(bot_username, messages, delay_time, transfer_link, chat_id, client):
-    """Send one notification for batch of files and delete all after timer"""
+async def batch_auto_del_notification(
+    bot_username: str,
+    messages: list,
+    delay_time: int,
+    transfer_link: str,
+    chat_id: int,
+    client: Client
+):
+    """Send one notification for batch of files and delete all after timer."""
     if not messages:
         return
 
