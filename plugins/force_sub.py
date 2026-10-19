@@ -18,20 +18,25 @@ def is_admin(client: Client, user_id: int) -> bool:
     return user_id == OWNER_ID or user_id in getattr(client, "admins", [])
 
 
+def _has_fsub_channel(client: Client, channel_id: int) -> bool:
+    fsub_dict = getattr(client, "fsub_dict", {})
+    return int(channel_id) in fsub_dict or str(channel_id) in fsub_dict
+
+
 # =============================================================== #
 #                JOIN REQUEST & MEMBER HANDLERS                   #
 # =============================================================== #
 
 @Client.on_chat_join_request(filters.channel)
 async def handle_join_request(client: Client, join_request: ChatJoinRequest):
-    """Handle join request for fsub channels"""
+    """Handle join request for fsub channels."""
     if not getattr(client, "fsub_enabled", True):
         return
 
     user_id = join_request.from_user.id
-    channel_id = join_request.chat.id
+    channel_id = int(join_request.chat.id)
 
-    if channel_id not in getattr(client, "fsub_dict", {}):
+    if not _has_fsub_channel(client, channel_id):
         return
 
     if await client.mongodb.is_banned(user_id):
@@ -50,7 +55,7 @@ async def handle_join_request(client: Client, join_request: ChatJoinRequest):
 
 @Client.on_chat_member_updated(filters.channel)
 async def handle_member_update(client: Client, chat_member_updated: ChatMemberUpdated):
-    """Handle member status updates for fsub channels"""
+    """Handle member status updates for fsub channels."""
     if not getattr(client, "fsub_enabled", True):
         return
 
@@ -58,9 +63,9 @@ async def handle_member_update(client: Client, chat_member_updated: ChatMemberUp
         return
 
     user_id = chat_member_updated.from_user.id
-    channel_id = chat_member_updated.chat.id
+    channel_id = int(chat_member_updated.chat.id)
 
-    if channel_id not in getattr(client, "fsub_dict", {}):
+    if not _has_fsub_channel(client, channel_id):
         return
 
     old_status = chat_member_updated.old_chat_member.status if chat_member_updated.old_chat_member else None
@@ -106,7 +111,7 @@ async def handle_member_update(client: Client, chat_member_updated: ChatMemberUp
 # =============================================================== #
 
 def get_fsub_text_and_markup(client: Client):
-    """Generates the Force Sub menu message text and InlineKeyboardMarkup"""
+    """Generates the Force Sub menu message text and InlineKeyboardMarkup."""
     if not hasattr(client, "fsub_enabled"):
         client.fsub_enabled = True
     if not hasattr(client, "auto_rotate"):
@@ -162,7 +167,7 @@ __Use the buttons below to manage your force subscription settings and channels!
 
 @Client.on_message(filters.command("forcesub") & filters.private)
 async def forcesub_command(client: Client, message: Message):
-    """Handle /forcesub command to display the button menu"""
+    """Handle /forcesub command to display the button menu."""
     if not is_admin(client, message.from_user.id):
         return await message.reply("**⚠️ You are not authorized to use this command!**")
 
@@ -172,7 +177,7 @@ async def forcesub_command(client: Client, message: Message):
 
 @Client.on_callback_query(filters.regex("^fsub$"))
 async def fsub(client: Client, query: CallbackQuery):
-    """Display or refresh the Force Subscription panel via callback"""
+    """Display or refresh the Force Subscription panel via callback."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -189,7 +194,7 @@ async def fsub(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^toggle_fsub$"))
 async def toggle_fsub_cb(client: Client, query: CallbackQuery):
-    """Toggle Force Subscribe On/Off"""
+    """Toggle Force Subscribe On/Off."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -203,7 +208,7 @@ async def toggle_fsub_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^toggle_rotate$"))
 async def toggle_rotate_cb(client: Client, query: CallbackQuery):
-    """Toggle Auto Rotate On/Off"""
+    """Toggle Auto Rotate On/Off."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -217,7 +222,7 @@ async def toggle_rotate_cb(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^add_fsub$"))
 async def add_fsub(client: Client, query: CallbackQuery):
-    """Add a new channel to Force Subscribe list"""
+    """Add a new channel to Force Subscribe list."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -246,7 +251,7 @@ async def add_fsub(client: Client, query: CallbackQuery):
         channel_id_str, request_str, timer_str = channel_info
         channel_id = int(channel_id_str)
 
-        if channel_id in client.fsub_dict:
+        if _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply("**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**")
 
         val, res = await is_bot_admin(client, channel_id)
@@ -288,7 +293,7 @@ async def add_fsub(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^rm_fsub$"))
 async def rm_fsub(client: Client, query: CallbackQuery):
-    """Remove a single channel from Force Subscribe list"""
+    """Remove a single channel from Force Subscribe list."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -307,7 +312,7 @@ async def rm_fsub(client: Client, query: CallbackQuery):
 
     try:
         channel_id = int(ask_channel_info.text.strip())
-        if channel_id not in client.fsub_dict:
+        if not _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply("**✗ This channel ID is not in the Force Sub list!**")
 
         if channel_id in client.req_channels:
@@ -315,6 +320,7 @@ async def rm_fsub(client: Client, query: CallbackQuery):
             await client.mongodb.set_channels(client.req_channels)
 
         client.fsub_dict.pop(channel_id, None)
+        client.fsub_dict.pop(str(channel_id), None)
         await client.mongodb.remove_fsub_channel(channel_id)
 
         await fsub(client, query)
@@ -325,7 +331,7 @@ async def rm_fsub(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^getall_fsub$"))
 async def getall_fsub(client: Client, query: CallbackQuery):
-    """Display detailed information for all configured Force Sub channels"""
+    """Display detailed information for all configured Force Sub channels."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -353,7 +359,7 @@ async def getall_fsub(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^rmall_fsub$"))
 async def rmall_fsub(client: Client, query: CallbackQuery):
-    """Ask confirmation before removing all Force Sub channels"""
+    """Ask confirmation before removing all Force Sub channels."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -375,7 +381,7 @@ async def rmall_fsub(client: Client, query: CallbackQuery):
 
 @Client.on_callback_query(filters.regex("^confirm_rmall_fsub$"))
 async def confirm_rmall_fsub(client: Client, query: CallbackQuery):
-    """Execute removal of all Force Sub channels"""
+    """Execute removal of all Force Sub channels."""
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
@@ -383,7 +389,7 @@ async def confirm_rmall_fsub(client: Client, query: CallbackQuery):
         channel_ids = list(client.fsub_dict.keys())
         for cid in channel_ids:
             try:
-                await client.mongodb.remove_fsub_channel(cid)
+                await client.mongodb.remove_fsub_channel(int(cid))
             except Exception:
                 pass
 
