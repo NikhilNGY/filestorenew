@@ -1,14 +1,13 @@
-import pyromod.listen
-from pyromod.listen import ListenerTypes
-
 import sys
 from datetime import datetime
-from aiohttp import web
-from pyrogram import Client
-from pyrogram.handlers import MessageHandler
-from pyrogram import filters
 
-from config import LOGGER, PORT, OWNER_ID
+import pyromod.listen
+from aiohttp import web
+from pyrogram import Client, filters
+from pyrogram.handlers import MessageHandler
+from pyromod.listen import ListenerTypes
+
+from config import LOGGER, OWNER_ID, PORT
 from database.database import MongoDB
 from plugins import web_server
 
@@ -31,7 +30,7 @@ class Bot(Client):
         api_id,
         api_hash,
         protect,
-        disable_btn
+        disable_btn,
     ):
         super().__init__(
             name=session,
@@ -39,15 +38,19 @@ class Bot(Client):
             api_id=api_id,
             plugins={"root": "plugins"},
             workers=workers,
-            bot_token=token
+            bot_token=token,
         )
-        
+
         # Pyromod Patch: Explicitly initialize listener types to prevent KeyError during deployment
-        if not hasattr(self, "listeners") or not isinstance(getattr(self, "listeners", None), dict) or ListenerTypes.MESSAGE not in getattr(self, "listeners", {}):
+        if (
+            not hasattr(self, "listeners")
+            or not isinstance(getattr(self, "listeners", None), dict)
+            or ListenerTypes.MESSAGE not in getattr(self, "listeners", {})
+        ):
             self.listeners = {
                 ListenerTypes.MESSAGE: [],
                 ListenerTypes.CALLBACK_QUERY: [],
-                ListenerTypes.INLINE_QUERY: []
+                ListenerTypes.INLINE_QUERY: [],
             }
 
         self.LOGGER = LOGGER
@@ -56,13 +59,17 @@ class Bot(Client):
         self.fsub = fsub
         self.owner = OWNER_ID
         self.fsub_dict = {}
-        self.admins = list(set(admins + [OWNER_ID])) if OWNER_ID not in admins else list(admins)
+        self.admins = (
+            list(set(admins + [OWNER_ID])) if OWNER_ID not in admins else list(admins)
+        )
         self.messages = dict(messages)
         self.auto_del = auto_del
         self.protect = protect
         self.req_fsub = {}
         self.disable_btn = disable_btn
-        self.reply_text = self.messages.get("REPLY", "Do not send any useless message in the bot.")
+        self.reply_text = self.messages.get(
+            "REPLY", "Do not send any useless message in the bot."
+        )
         self.mongodb = MongoDB(db_uri, db_name)
         self.req_channels = []
         self.db_channels = {}
@@ -89,7 +96,9 @@ class Bot(Client):
         try:
             await self.mongodb.init_multi_db(self)
         except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Error initializing Multi-DB: {e}")
+            self.LOGGER(__name__, self.name).warning(
+                f"Error initializing Multi-DB: {e}"
+            )
 
         # 2. Load Persistent Bot Settings, Messages, Shortener & Admins
         try:
@@ -120,9 +129,13 @@ class Bot(Client):
             self.shortner_enabled = shortner_cfg.get("enabled", False)
             self.short_url = shortner_cfg.get("short_url", "")
             self.short_api = shortner_cfg.get("short_api", "")
-            self.tutorial_link = shortner_cfg.get("tutorial_link", "https://t.me/How_to_Download_7x/26")
+            self.tutorial_link = shortner_cfg.get(
+                "tutorial_link", "https://t.me/How_to_Download_7x/26"
+            )
         except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Error loading saved settings: {e}")
+            self.LOGGER(__name__, self.name).warning(
+                f"Error loading saved settings: {e}"
+            )
 
         # 3. Load Static FSub Channels from config.py
         if len(self.fsub) > 0:
@@ -134,7 +147,9 @@ class Bot(Client):
                     if not channel[1]:
                         link = chat.invite_link
                     if not link and not channel[2]:
-                        chat_link = await self.create_chat_invite_link(channel[0], creates_join_request=channel[1])
+                        chat_link = await self.create_chat_invite_link(
+                            channel[0], creates_join_request=channel[1]
+                        )
                         link = chat_link.invite_link
                     if not channel[1]:
                         self.fsub_dict[channel[0]] = [name, link, False, 0]
@@ -142,9 +157,16 @@ class Bot(Client):
                         self.fsub_dict[channel[0]] = [name, link, True, 0]
                         self.req_channels.append(channel[0])
                     if channel[2] > 0:
-                        self.fsub_dict[channel[0]] = [name, None, channel[1], channel[2]]
+                        self.fsub_dict[channel[0]] = [
+                            name,
+                            None,
+                            channel[1],
+                            channel[2],
+                        ]
                 except Exception as e:
-                    self.LOGGER(__name__, self.name).warning(f"Bot can't Export Invite link from Force Sub Channel: {e}")
+                    self.LOGGER(__name__, self.name).warning(
+                        f"Bot can't Export Invite link from Force Sub Channel: {e}"
+                    )
 
         # 4. Load Dynamically Added FSub Channels from Database
         try:
@@ -160,10 +182,14 @@ class Bot(Client):
                     if channel_data[2] and channel_id not in self.req_channels:
                         self.req_channels.append(channel_id)
                 except Exception as e:
-                    self.LOGGER(__name__, self.name).warning(f"Could not load dynamic fsub channel {channel_id}: {e}")
+                    self.LOGGER(__name__, self.name).warning(
+                        f"Could not load dynamic fsub channel {channel_id}: {e}"
+                    )
                     await self.mongodb.remove_fsub_channel(channel_id)
         except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Error loading dynamic fsub channels: {e}")
+            self.LOGGER(__name__, self.name).warning(
+                f"Error loading dynamic fsub channels: {e}"
+            )
 
         await self.mongodb.set_channels(self.req_channels)
 
@@ -184,7 +210,9 @@ class Bot(Client):
                         self.primary_db_channel = channel_id
                         self.db = channel_id
                 except Exception as e:
-                    self.LOGGER(__name__, self.name).warning(f"Could not load DB channel {channel_id}: {e}")
+                    self.LOGGER(__name__, self.name).warning(
+                        f"Could not load DB channel {channel_id}: {e}"
+                    )
                     await self.mongodb.remove_db_channel(channel_id)
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(f"Error loading DB channels: {e}")
@@ -193,11 +221,17 @@ class Bot(Client):
         try:
             db_channel = await self.get_chat(self.db)
             self.db_channel = db_channel
-            test = await self.send_message(chat_id=db_channel.id, text="Testing DB Channel Access...")
+            test = await self.send_message(
+                chat_id=db_channel.id, text="Testing DB Channel Access..."
+            )
             await test.delete()
 
-            self.LOGGER(__name__, self.name).info(f"Primary DB Channel: {self.primary_db_channel}")
-            self.LOGGER(__name__, self.name).info(f"Total DB Channels: {len(self.db_channels)}")
+            self.LOGGER(__name__, self.name).info(
+                f"Primary DB Channel: {self.primary_db_channel}"
+            )
+            self.LOGGER(__name__, self.name).info(
+                f"Total DB Channels: {len(self.db_channels)}"
+            )
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(e)
             self.LOGGER(__name__, self.name).warning(
@@ -208,6 +242,7 @@ class Bot(Client):
         # 7. Start Connected Worker Bots (/bots) if any exist
         try:
             from plugins.others import start_all_worker_bots
+
             await start_all_worker_bots(self)
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(f"Worker bots startup notice: {e}")
@@ -218,7 +253,9 @@ class Bot(Client):
             restart_message = "<b>›› ʜᴇʏ sᴇɴᴘᴀɪ!!\n ɪ'ᴍ ᴀʟɪᴠᴇ ɴᴏᴡ 🍃...</b>"
             await self.send_message(chat_id=self.owner, text=restart_message)
         except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Failed to send restart notification to owner: {e}")
+            self.LOGGER(__name__, self.name).warning(
+                f"Failed to send restart notification to owner: {e}"
+            )
 
     async def stop(self, *args):
         for w_id, w_client in list(self.worker_clients.items()):
