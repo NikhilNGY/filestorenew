@@ -1,8 +1,11 @@
-import pyromod.listen
 import asyncio
-from bot import Bot, web_app
+
+import pyromod.listen
 from pyrogram import compose
+
+from bot import Bot, web_app
 from config import *
+
 
 async def main():
     app = []
@@ -23,7 +26,7 @@ async def main():
             API_ID,
             API_HASH,
             PROTECT,
-            DISABLE_BTN
+            DISABLE_BTN,
         )
     )
 
@@ -31,10 +34,8 @@ async def main():
 
 
 async def runner():
-    await asyncio.gather(
-        main(),
-        web_app()
-    )
+    await asyncio.gather(main(), web_app())
+
 
 if __name__ == "__main__":
     try:
