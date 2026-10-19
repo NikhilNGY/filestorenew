@@ -14,6 +14,7 @@ from pyrogram.errors import FloodWait
 from pyrogram.errors.pyromod import ListenerTimeout
 
 from config import MSG_EFFECT, OWNER_ID
+from texts import texts as render_texts_menu, update_text_field
 from database.database import (
     get_messages,
     force_sub,
@@ -302,7 +303,7 @@ async def start_command(client: Client, message: Message):
         # 4. Route non-premium users through shortener if enabled
         if not is_user_pro and not is_admin(client, user_id) and not is_short_link and shortner_enabled:
             try:
-                short_link = get_short(f"https://t.me/{client.username}?start=yu3elk{base64_string}7", client)
+                short_link = await get_short(f"https://t.me/{client.username}?start=yu3elk{base64_string}7", client)
             except Exception as e:
                 client.LOGGER(__name__, client.name).warning(f"Shortener failed: {e}")
                 return await message.reply("⚠️ **Couldn't generate short link. Please try again later.**")
@@ -311,6 +312,12 @@ async def start_command(client: Client, message: Message):
             short_caption = client.messages.get(
                 "SHORT_MSG",
                 "🔗 **Please verify the link below to access your files.**"
+            ).format(
+                first=message.from_user.first_name or "",
+                last=message.from_user.last_name or "",
+                username=None if not message.from_user.username else "@" + message.from_user.username,
+                mention=message.from_user.mention,
+                id=message.from_user.id
             )
             tutorial_link = getattr(client, "tutorial_link", "https://t.me/How_to_Download_7x/26")
 
@@ -624,7 +631,7 @@ async def settings_page_2(client: Client, query: CallbackQuery):
 
     msg = get_settings_text(client)
     reply_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("ᴘʀᴏᴛᴇᴄᴛ ᴄᴏɴᴛᴇɴᴛ", "protect"), InlineKeyboardButton("ᴅɪsᴀʙʟᴇ ʙᴜᴛᴛᴏɴ", " toggle_disable_btn".strip())],
+        [InlineKeyboardButton("ᴘʀᴏᴛᴇᴄᴛ ᴄᴏɴᴛᴇɴᴛ", "protect"), InlineKeyboardButton("ᴅɪsᴀʙʟᴇ ʙᴜᴛᴛᴏɴ", "toggle_disable_btn")],
         [InlineKeyboardButton("ᴘʜᴏᴛᴏs", "photos"), InlineKeyboardButton("ᴛᴇxᴛs", "texts")],
         [InlineKeyboardButton("🔗 sʜᴏʀᴛɴᴇʀ", "shortner"), InlineKeyboardButton("⚙️ ᴏᴛʜᴇʀʙᴏᴛs ʀᴇᴘʟʏ", "otherbots_menu")],
         [InlineKeyboardButton("‹ ᴘʀᴇᴠ", "settings"), InlineKeyboardButton("ʜᴏᴍᴇ", "home")]
@@ -667,6 +674,7 @@ __ᴜsᴇ ᴛʜᴇ ᴀᴘᴘʀᴏᴘʀɪᴀᴛᴇ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ
     reply_markup = InlineKeyboardMarkup([
         [InlineKeyboardButton("›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", "add_db_channel"), InlineKeyboardButton("›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", "rm_db_channel")],
         [InlineKeyboardButton("›› sᴇᴛ ᴘʀɪᴍᴀʀʏ", "set_primary_db"), InlineKeyboardButton("›› sᴛᴀᴛᴜs", "toggle_db_status")],
+        [InlineKeyboardButton("›› ᴠɪᴇᴡ ᴅᴇᴛᴀɪʟs", "db_details")],
         [InlineKeyboardButton("‹ ʙᴀᴄᴋ", "settings")]
     ])
     await query.message.edit_text(msg, reply_markup=reply_markup)
@@ -684,7 +692,7 @@ async def add_db_channel(client: Client, query: CallbackQuery):
 __sᴇɴᴅ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ɪᴅ (ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢᴇʀ ᴠᴀʟᴜᴇ) ᴏғ ᴛʜᴇ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟ ʏᴏᴜ ᴡᴀɴᴛ ᴛᴏ ᴀᴅᴅ ɪɴ ᴛʜᴇ ɴᴇxᴛ 60 sᴇᴄᴏɴᴅs!__
 
 **ᴇxᴀᴍᴘʟᴇ:** `-1001234567675`
-**ɴᴏᴛᴇ:** ᴍᴀᴋᴇ sᴜʀᴇ ᴛʜᴇ ʙᴏᴛ ɪs ᴀᴅᴍɪɴ ɪɴ ᴛʜᴇ ᴄʜᴀɴɴᴇᴇʟ!"""
+**ɴᴏᴛᴇ:** ᴍᴀᴋᴇ sᴜʀᴇ ᴛʜᴇ ʙᴏᴛ ɪs ᴀᴅᴍɪɴ ɪɴ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ!"""
 
     await query.message.edit_text(msg, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("‹ ᴄᴀɴᴄᴇʟ", "db_channels")]]))
     try:
@@ -993,6 +1001,7 @@ async def photos_menu(client: Client, query: CallbackQuery):
     msg = f"""<blockquote>**Photo Settings:**</blockquote>
 **Start Photo:** `{client.messages.get("START_PHOTO", "None") or "None"}`
 **Force Sub Photo:** `{client.messages.get("FSUB_PHOTO", "None") or "None"}`
+**Shortener Photo:** `{client.messages.get("SHORT_PIC", "None") or "None"}`
 
 __Use the appropriate button below to set, change, or remove bot photos!__"""
 
@@ -1122,26 +1131,10 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
 async def texts_menu(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
-
-    msg = f"""<blockquote>**Text Configuration:**</blockquote>
-**Start Message:**
-<pre>{client.messages.get('START', 'Empty')}</pre>
-**Force Sub Message:**
-<pre>{client.messages.get('FSUB', 'Empty')}</pre>
-**About Message:**
-<pre>{client.messages.get('ABOUT', 'Empty')}</pre>
-**Reply Message:**
-<pre>{client.reply_text}</pre>"""
-
-    reply_markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("ꜱᴛᴀʀᴛ ᴛᴇxᴛ", "start_txt"), InlineKeyboardButton("ꜰꜱᴜʙ ᴛᴇxᴛ", "fsub_txt")],
-        [InlineKeyboardButton("ʀᴇᴘʟʏ ᴛᴇxᴛ", "reply_txt"), InlineKeyboardButton("ᴀʙᴏᴜᴛ ᴛᴇxᴛ", "about_txt")],
-        [InlineKeyboardButton("◂ ʙᴀᴄᴋ", "settings_page_2")]
-    ])
-    await query.message.edit_text(msg, reply_markup=reply_markup)
+    await render_texts_menu(client, query)
 
 
-@Client.on_callback_query(filters.regex("^(start_txt|fsub_txt|reply_txt|about_txt)$"))
+@Client.on_callback_query(filters.regex("^(start_txt|fsub_txt|reply_txt|about_txt|short_msg_txt|caption_txt)$"))
 async def edit_text_settings(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
@@ -1150,30 +1143,12 @@ async def edit_text_settings(client: Client, query: CallbackQuery):
         "start_txt": ("START", "Start Message"),
         "fsub_txt": ("FSUB", "Force Sub Message"),
         "reply_txt": ("REPLY", "Reply Message"),
-        "about_txt": ("ABOUT", "About Message")
+        "about_txt": ("ABOUT", "About Message"),
+        "short_msg_txt": ("SHORT_MSG", "Shortener Message"),
+        "caption_txt": ("CAPTION", "Custom Caption Template")
     }
     db_key, label = key_map[query.data]
-    await query.answer()
-    await query.message.edit_text(
-        f"<blockquote>**Edit {label}:**</blockquote>\nSend the new **{label}** text within 60 seconds (HTML formatting supported):",
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", "texts")]])
-    )
-    try:
-        res = await client.listen(user_id=query.from_user.id, filters=filters.text, timeout=60)
-        new_val = res.text
-        client.messages[db_key] = new_val
-        if db_key == "REPLY":
-            client.reply_text = new_val
-        await client.mongodb.update_message_setting(db_key, new_val)
-        await query.message.edit_text(
-            f"**✅ {label} updated successfully!**",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", "texts")]])
-        )
-    except ListenerTimeout:
-        await query.message.edit_text(
-            "**❌ Timeout, try again!**",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", "texts")]])
-        )
+    await update_text_field(client, query, db_key, label)
 
 
 @Client.on_callback_query(filters.regex("^shortner$"))
@@ -1225,7 +1200,7 @@ async def shortner_set_values_cb(client: Client, query: CallbackQuery):
 
     field = query.data.split("_")[-1]
     prompts = {
-        "url": ("short_url", "Send the **Shortener Domain** (e.g. `arlinks.in`):"),
+        "url": ("short_url", "Send the **Shortener Domain** (e.g. `linkshortify.com`):"),
         "api": ("short_api", "Send the **Shortener API Key**:"),
         "tut": ("tutorial_link", "Send the **Tutorial Link** (e.g. `https://t.me/channel/10`):")
     }
