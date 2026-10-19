@@ -1,41 +1,39 @@
+
 import logging
 from logging.handlers import RotatingFileHandler
 
 # Bot Configuration
 LOG_FILE_NAME = "bot.log"
-PORT = "5010"
+PORT = 5010
 OWNER_ID = 2098589219
 
 MSG_EFFECT = 5046509860389126442
 
-SHORT_URL = "arolinks.com"  # shortner url
-SHORT_API = "3e3a347b22326f15832b2241aec169ea4d0beafb"
+SHORT_URL = "arolinks.com"  # shortener url 
+SHORT_API = "3e3a347b22326f15832b2241aec169ea4d0beafb" 
 SHORT_TUT = "https://t.me/How_to_Download_7x/26"
 
-# Bot Configuration
+# Bot Credentials & Session
 SESSION = "yato"
 TOKEN = "8316991207:AAGRFL-GPiXJ0gtMfaFad8SnxslCvtZIONA"
-API_ID = "1313697"
+API_ID = "1313697"  # Put your API ID integer here
 API_HASH = "9f1f1ed9bb3585823c77e1953d3b102d"
 WORKERS = 5
 
-DB_URI = "mongodb+srv://jeevannaidu143_db_user:i8lOiNX4429meL1z@filestorenew.fstfq69.mongodb.net/"
+DB_URI = "mongodb+srv://jeevannaidu143_db_user:i8lOiNX4429meL1z@filestorenew.fstfq69.mongodb.net/"  # Put your MongoDB connection string here
 DB_NAME = "yato"
 
-FSUBS = [
-    [-1002055023335, True, 10]
-]  # Force Subscription Channels [channel_id, request_enabled, timer_in_minutes]
-# Database Channel (Primary)
-DB_CHANNEL = "-1001753089099"
-# Multiple Database Channels (can be set via bot settings)
-# DB_CHANNELS = {
-#     "-1001753089099": {"name": "Primary DB", "is_primary": True, "is_active": True},
-#     "-1001234567890": {"name": "Secondary DB", "is_primary": False, "is_active": True}
-# }
+FSUBS = [[-1002055023335, True, 10]]  # Force Subscription Channels [channel_id, request_enabled, timer_in_minutes]
+
+# Database Channel (Primary) - put integer ID here (e.g. -100...)
+DB_CHANNEL = -1001753089099
+
 # Auto Delete Timer (seconds)
 AUTO_DEL = 30
+
 # Admin IDs
 ADMINS = [2098589219]
+
 # Bot Settings
 DISABLE_BTN = True
 PROTECT = True
@@ -50,19 +48,16 @@ MESSAGES = {
     "START_PHOTO": "https://graph.org/file/510affa3d4b6c911c12e3.jpg",
     "FSUB_PHOTO": "https://telegra.ph/file/7a16ef7abae23bd238c82-b8fbdcb05422d71974.jpg",
     "SHORT_PIC": "https://telegra.ph/file/7a16ef7abae23bd238c82-b8fbdcb05422d71974.jpg",
-    "SHORT": "https://telegra.ph/file/8aaf4df8c138c6685dcee-05d3b183d4978ec347.jpg",
+    "SHORT": "https://telegra.ph/file/8aaf4df8c138c6685dcee-05d3b183d4978ec347.jpg"
 }
-
 
 def LOGGER(name: str, client_name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     formatter = logging.Formatter(
         f"[%(asctime)s - %(levelname)s] - {client_name} - %(name)s - %(message)s",
-        datefmt="%d-%b-%y %H:%M:%S",
+        datefmt='%d-%b-%y %H:%M:%S'
     )
-    file_handler = RotatingFileHandler(
-        LOG_FILE_NAME, maxBytes=50_000_000, backupCount=10
-    )
+    file_handler = RotatingFileHandler(LOG_FILE_NAME, maxBytes=50_000_000, backupCount=10)
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
