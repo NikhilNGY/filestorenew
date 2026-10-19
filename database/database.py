@@ -2,6 +2,7 @@ import base64
 import re
 import asyncio
 import urllib.parse
+import aiohttp
 import requests
 import motor.motor_asyncio
 from datetime import datetime, timedelta
@@ -684,11 +685,11 @@ class MongoDB:
 
 
 # =============================================================== #
-#                SHORTENER HELPER FUNCTION                        #
+#                ASYNC SHORTENER HELPER FUNCTION                  #
 # =============================================================== #
 
-def get_short(url: str, client) -> str:
-    """Shorten a URL using the configured shortener domain and API key"""
+async def get_short(url: str, client) -> str:
+    """Non-blocking URL shortener using aiohttp (with fallback to requests)."""
     short_url = getattr(client, "short_url", None)
     short_api = getattr(client, "short_api", None)
     if not short_url or not short_api:
@@ -696,9 +697,11 @@ def get_short(url: str, client) -> str:
     try:
         clean_domain = short_url.replace("https://", "").replace("http://", "").strip("/")
         api_endpoint = f"https://{clean_domain}/api?api={short_api}&url={urllib.parse.quote(url)}"
-        resp = requests.get(api_endpoint, timeout=10).json()
-        if resp.get("status") == "success" or resp.get("shortenedUrl"):
-            return resp.get("shortenedUrl", url)
+        async with aiohttp.ClientSession() as session:
+            async with session.get(api_endpoint, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                data = await resp.json(content_type=None)
+                if data.get("status") == "success" or data.get("shortenedUrl"):
+                    return data.get("shortenedUrl", url)
     except Exception as e:
         print(f"Shortener API error: {e}")
     return url
@@ -713,11 +716,13 @@ async def encode(string: str) -> str:
     base64_bytes = base64.urlsafe_b64encode(string_bytes)
     return base64_bytes.decode("ascii").strip("=")
 
+
 async def decode(base64_string: str) -> str:
     base64_string = base64_string.strip("=")
     base64_bytes = (base64_string + "=" * (-len(base64_string) % 4)).encode("ascii")
     string_bytes = base64.urlsafe_b64decode(base64_bytes)
     return string_bytes.decode("ascii")
+
 
 async def get_messages(client, message_ids):
     messages = []
@@ -736,6 +741,7 @@ async def get_messages(client, message_ids):
         total_messages += len(temb_ids)
         messages.extend(msgs)
     return messages
+
 
 async def get_message_id(client, message):
     """Get message ID and source channel ID from forwarded message or link"""
@@ -775,6 +781,7 @@ async def get_message_id(client, message):
                 except Exception:
                     continue
     return 0, 0
+
 
 async def get_messages_from_db_channels(client, temb_ids):
     """Get messages from multiple DB channels - tries primary first, then falls back to others"""
@@ -848,6 +855,7 @@ async def is_bot_admin(client, channel_id):
     except Exception as e:
         return False, f"Unexpected error: {str(e)}"
 
+
 async def check_subscription(client, user_id):
     """Enhanced subscription check with request channel and auto-rotate support."""
     if not getattr(client, "fsub_enabled", True):
@@ -915,12 +923,14 @@ async def check_subscription(client, user_id):
 
     return statuses
 
+
 def is_user_subscribed(statuses):
     """Check if user is subscribed to all channels."""
     return all(
         status in {ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.OWNER}
         for status in statuses.values() if status is not None
     ) and bool(statuses)
+
 
 def force_sub(func):
     """Decorator to enforce force subscription before executing a command."""
@@ -998,6 +1008,7 @@ def force_sub(func):
 
 DEL_MSG = """<b>This File is deleting automatically in <a href="https://t.me/{username}">{time}</a>.. Forward in your Saved Messages..!</b>"""
 
+
 def convert_time(duration_seconds: int) -> str:
     periods = [
         ("Yᴇᴀʀ", 60 * 60 * 24 * 365),
@@ -1021,6 +1032,7 @@ def convert_time(duration_seconds: int) -> str:
         return parts[0]
     else:
         return ", ".join(parts[:-1]) + " ᴀɴᴅ " + parts[-1]
+
 
 async def batch_auto_del_notification(bot_username, messages, delay_time, transfer_link, chat_id, client):
     """Send one notification for batch of files and delete all after timer"""
