@@ -1,11 +1,10 @@
-pyromod
 aiohttp
 dnspython
-pyrofork==2.3.50
+pyrofork2.3.50
+pyromod1.5
 humanize
 psutil
 motor
 markdown
-asyncio
 TgCrypto
 requests
