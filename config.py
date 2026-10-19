@@ -4,12 +4,12 @@ from logging.handlers import RotatingFileHandler
 # Bot Configuration
 LOG_FILE_NAME = "bot.log"
 PORT = '5010'
-OWNER_ID = 6497757690
+OWNER_ID = 2098589219
 
 MSG_EFFECT = 5046509860389126442
 
-SHORT_URL = "linkshortify.com" # shortner url 
-SHORT_API = "" 
+SHORT_URL = "arolinks.com" # shortner url 
+SHORT_API = "3e3a347b22326f15832b2241aec169ea4d0beafb" 
 SHORT_TUT = "https://t.me/How_to_Download_7x/26"
 
 # Bot Configuration
@@ -19,10 +19,10 @@ API_ID = ""
 API_HASH = ""
 WORKERS = 5
 
-DB_URI = "mongodb"
+DB_URI = "mongodb+srv://jeevannaidu143_db_user:i8lOiNX4429meL1z@filestorenew.fstfq69.mongodb.net/"
 DB_NAME = "yato"
 
-FSUBS = [[-1003016571084, True, 10]] # Force Subscription Channels [channel_id, request_enabled, timer_in_minutes]
+FSUBS = [[-1002055023335, True, 10]] # Force Subscription Channels [channel_id, request_enabled, timer_in_minutes]
 # Database Channel (Primary)
 DB_CHANNEL =    # just put channel id dont add ""
 # Multiple Database Channels (can be set via bot settings)
@@ -31,9 +31,9 @@ DB_CHANNEL =    # just put channel id dont add ""
 #     "-1001234567890": {"name": "Secondary DB", "is_primary": False, "is_active": True}
 # }
 # Auto Delete Timer (seconds)
-AUTO_DEL = 300
+AUTO_DEL = 30
 # Admin IDs
-ADMINS = [6497757690, 6103092779]
+ADMINS = [2098589219]
 # Bot Settings
 DISABLE_BTN = True
 PROTECT = True
