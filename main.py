@@ -1,44 +1,54 @@
-import asyncio
-
 import pyromod.listen
-from pyrogram import compose
-
+import asyncio
+from pyrogram import idle
 from bot import Bot, web_app
-from config import *
-
-
-async def main():
-    app = []
-
-    # Create bot instance using config.py values
-    app.append(
-        Bot(
-            SESSION,
-            WORKERS,
-            DB_CHANNEL,
-            FSUBS,
-            TOKEN,
-            ADMINS,
-            MESSAGES,
-            AUTO_DEL,
-            DB_URI,
-            DB_NAME,
-            API_ID,
-            API_HASH,
-            PROTECT,
-            DISABLE_BTN,
-        )
-    )
-
-    await compose(app)
+from config import (
+    SESSION,
+    WORKERS,
+    DB_CHANNEL,
+    FSUBS,
+    TOKEN,
+    ADMINS,
+    MESSAGES,
+    AUTO_DEL,
+    DB_URI,
+    DB_NAME,
+    API_ID,
+    API_HASH,
+    PROTECT,
+    DISABLE_BTN
+)
 
 
 async def runner():
-    await asyncio.gather(main(), web_app())
+    # 1. Start the web server FIRST so deployment health checks on PORT 5010 pass immediately
+    await web_app()
+
+    # 2. Initialize and start the Bot client
+    bot_client = Bot(
+        SESSION,
+        WORKERS,
+        DB_CHANNEL,
+        FSUBS,
+        TOKEN,
+        ADMINS,
+        MESSAGES,
+        AUTO_DEL,
+        DB_URI,
+        DB_NAME,
+        API_ID,
+        API_HASH,
+        PROTECT,
+        DISABLE_BTN
+    )
+
+    await bot_client.start()
+    await idle()
+    await bot_client.stop()
 
 
 if __name__ == "__main__":
     try:
         asyncio.run(runner())
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, SystemExit):
         pass
