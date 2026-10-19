@@ -1,3 +1,4 @@
+pyromod
 aiohttp
 dnspython
 pyrofork==2.3.50
