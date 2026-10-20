@@ -2,7 +2,6 @@ import asyncio
 from collections import defaultdict
 
 from pyrogram import Client, filters
-from pyrogram.errors.pyromod import ListenerTimeout
 from pyrogram.handlers import MessageHandler
 from pyrogram.types import (
     CallbackQuery,
@@ -12,7 +11,14 @@ from pyrogram.types import (
 )
 
 from config import API_HASH, API_ID
-from plugins.start import is_admin, resolve_and_deliver_files, safe_edit_or_send
+from plugins.start import (
+    ListenerTimeout,
+    cancel_user_listeners,
+    is_admin,
+    resolve_and_deliver_files,
+    safe_edit_or_send,
+    wait_for_user_input,
+)
 
 # ================================================================================= #
 #                     WORKER BOT LIFECYCLE & LOAD BALANCER                          #
@@ -219,6 +225,7 @@ async def multi_bot_panel(client: Client, message: Message):
     if not is_admin(client, message.from_user.id):
         return await message.reply("❌ You are not authorized to use this command.")
 
+    cancel_user_listeners(client, message.from_user.id)
     text, markup = await get_multi_bot_panel_data(client)
     await message.reply(text, reply_markup=markup)
 
@@ -228,7 +235,7 @@ async def bots_menu_cb(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
+    cancel_user_listeners(client, query.from_user.id)
     text, markup = await get_multi_bot_panel_data(client)
     await safe_edit_or_send(client, query, text, markup)
 
@@ -260,7 +267,6 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
     await safe_edit_or_send(
         client,
         query,
@@ -273,16 +279,13 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
     )
 
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        tokens = [line.strip() for line in res.text.splitlines() if line.strip()]
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        raw_text = res.text or ""
+        tokens = [line.strip() for line in raw_text.splitlines() if line.strip()]
         if not tokens:
-            return await safe_edit_or_send(
-                client,
-                query,
+            return await res.reply(
                 "**❌ No valid tokens provided!**",
-                InlineKeyboardMarkup(
+                reply_markup=InlineKeyboardMarkup(
                     [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
                 ),
             )
@@ -360,11 +363,11 @@ async def list_worker_bots(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    cancel_user_listeners(client, query.from_user.id)
     worker_bots = await client.mongodb.get_worker_bots()
     if not worker_bots:
         return await query.answer("No worker bots connected yet!", show_alert=True)
 
-    await query.answer()
     buttons = []
     for bot in worker_bots:
         bot_id = bot["bot_id"]
@@ -494,6 +497,7 @@ async def other_bots_panel(client: Client, message: Message):
     if not is_admin(client, message.from_user.id):
         return await message.reply("❌ You are not authorized.")
 
+    cancel_user_listeners(client, message.from_user.id)
     text, markup = await get_otherbots_panel_data(client)
     await message.reply(text, reply_markup=markup)
 
@@ -503,7 +507,7 @@ async def otherbots_menu_cb(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
+    cancel_user_listeners(client, query.from_user.id)
     text, markup = await get_otherbots_panel_data(client)
     await safe_edit_or_send(client, query, text, markup)
 
@@ -529,7 +533,6 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
         text, markup = await get_otherbots_panel_data(client)
         return await safe_edit_or_send(client, query, text, markup)
 
-    await query.answer()
     prompt_msg = "Send the new value within 60 seconds:"
     if target == "btn":
         prompt_msg = (
@@ -550,16 +553,25 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
 
     try:
         if target == "txt":
-            res = await client.listen(
-                user_id=query.from_user.id, filters=filters.text, timeout=60
-            )
+            res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+            if not res.text:
+                return await res.reply(
+                    "**❌ Please send valid text!**",
+                    reply_markup=InlineKeyboardMarkup(
+                        [
+                            [
+                                InlineKeyboardButton(
+                                    "◂ ʙᴀᴄᴋ", callback_data="otherbots_menu"
+                                )
+                            ]
+                        ]
+                    ),
+                )
             await client.mongodb.update_otherbots_config({"text": res.text})
 
         elif target == "img":
-            res = await client.listen(
-                user_id=query.from_user.id,
-                filters=(filters.photo | filters.text),
-                timeout=60,
+            res = await wait_for_user_input(
+                client, query.from_user.id, timeout=60, expect_photo=True
             )
             if res.photo:
                 await client.mongodb.update_otherbots_config(
@@ -570,11 +582,9 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
                     {"image": res.text.strip()}
                 )
             else:
-                return await safe_edit_or_send(
-                    client,
-                    query,
+                return await res.reply(
                     "**❌ Invalid image or link!**",
-                    InlineKeyboardMarkup(
+                    reply_markup=InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
@@ -586,20 +596,16 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
                 )
 
         elif target == "btn":
-            res = await client.listen(
-                user_id=query.from_user.id, filters=filters.text, timeout=60
-            )
-            if "|" in res.text:
+            res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+            if res.text and "|" in res.text:
                 name, url = res.text.split("|", 1)
                 await client.mongodb.update_otherbots_config(
                     {"button_name": name.strip(), "button_url": url.strip()}
                 )
             else:
-                return await safe_edit_or_send(
-                    client,
-                    query,
+                return await res.reply(
                     "**❌ Invalid format! Must include `|` separator.**",
-                    InlineKeyboardMarkup(
+                    reply_markup=InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
@@ -612,6 +618,7 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
 
         text, markup = await get_otherbots_panel_data(client)
         await safe_edit_or_send(client, query, text, markup)
+        await res.reply("**✅ Worker Bot setting updated successfully!**")
     except ListenerTimeout:
         await safe_edit_or_send(
             client,
