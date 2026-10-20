@@ -30,7 +30,6 @@ from plugins.start import (
     safe_edit_or_send,
 )
 
-
 # =============================================================== #
 #                ADMIN SETTINGS & SYSTEM STATS                    #
 # =============================================================== #
@@ -75,7 +74,9 @@ async def add_new_admins(client: Client, query: CallbackQuery):
         client,
         query,
         "<blockquote>**➕ Add New Admins:**</blockquote>\nSend user IDs separated by a space in the next 60 seconds!\n\n**Example:** `838278682 83622928`",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="admins")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="admins")]]
+        ),
     )
     try:
         ids_msg = await client.listen(
@@ -88,7 +89,9 @@ async def add_new_admins(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]
+            ),
         )
     except Exception:
         return
@@ -105,7 +108,9 @@ async def add_new_admins(client: Client, query: CallbackQuery):
     except Exception as e:
         return await ids_msg.reply(
             f"**Error:** `{e}`",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]
+            ),
         )
 
     await admins(client, query)
@@ -125,7 +130,9 @@ async def remove_admins(client: Client, query: CallbackQuery):
         client,
         query,
         "<blockquote>**➖ Remove Admins:**</blockquote>\nSend user IDs separated by a space in the next 60 seconds!\n\n**Example:** `838278682 83622928`",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="admins")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="admins")]]
+        ),
     )
     try:
         ids_msg = await client.listen(
@@ -138,7 +145,9 @@ async def remove_admins(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]
+            ),
         )
     except Exception:
         return
@@ -161,7 +170,9 @@ async def remove_admins(client: Client, query: CallbackQuery):
     except Exception as e:
         return await ids_msg.reply(
             f"**Error:** `{e}`",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="admins")]]
+            ),
         )
 
     await admins(client, query)
@@ -514,7 +525,9 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
         "Send your **Database Name** and **MongoDB URL** separated by a space in the next 60 seconds!\n\n"
         "**Example:**\n`DB1 mongodb+srv://user:pass@cluster.mongodb.net/`\n\n"
         "*(Or simply send the `mongodb+srv://...` URL directly and a name will be auto-assigned)*",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="datadb_menu")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="datadb_menu")]]
+        ),
     )
 
     try:
@@ -528,7 +541,9 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]
+            ),
         )
     except Exception:
         return
@@ -546,7 +561,9 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
         if entry["url"] == url:
             return await ask_info.reply(
                 "**✗ This Database URL is already added in the list!**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]
+                ),
             )
 
     short_id = "".join(
@@ -663,7 +680,9 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
         "<blockquote>**➖ ʀᴇᴍᴏᴠᴇ ᴅᴀᴛᴀʙᴀsᴇ ᴜʀʟ**</blockquote>\n\n"
         "Send the **Url Name** or full **MongoDB URL** you want to remove in the next 60 seconds:\n\n"
         "__Tip: You can also remove URLs with 1 click from the `url list` button!__",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="datadb_menu")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="datadb_menu")]]
+        ),
     )
     try:
         ask_rm = await client.listen(
@@ -676,7 +695,9 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]
+            ),
         )
     except Exception:
         return
@@ -696,7 +717,9 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
     if not removed_entry:
         return await ask_rm.reply(
             f"**✗ Could not find any Database URL matching `{target}`!**",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]
+            ),
         )
 
     await client.mongodb.remove_db_url(removed_entry["id"])
@@ -788,9 +811,17 @@ __ᴜsᴇ ᴛʜᴇ ʙᴜᴛᴛᴏɴs ʙᴇʟᴏᴡ ᴛᴏ ᴍᴀɴᴀɢᴇ ʏᴏ
     reply_markup = InlineKeyboardMarkup(
         [
             [InlineKeyboardButton("›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="add_db_channel")],
-            [InlineKeyboardButton("›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="rm_db_channel")],
+            [
+                InlineKeyboardButton(
+                    "›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="rm_db_channel"
+                )
+            ],
             [InlineKeyboardButton("›› sᴇᴛ ᴘʀɪᴍᴀʀʏ", callback_data="set_primary_db")],
-            [InlineKeyboardButton("›› ᴛᴏɢɢʟᴇ sᴛᴀᴛᴜs", callback_data="toggle_db_status")],
+            [
+                InlineKeyboardButton(
+                    "›› ᴛᴏɢɢʟᴇ sᴛᴀᴛᴜs", callback_data="toggle_db_status"
+                )
+            ],
             [InlineKeyboardButton("›› ᴠɪᴇᴡ ᴅᴇᴛᴀɪʟs", callback_data="db_details")],
             [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")],
         ]
@@ -843,7 +874,13 @@ async def db_details(client: Client, query: CallbackQuery):
         msg += "_ɴᴏ ᴀᴅᴅɪᴛɪᴏɴᴀʟ ᴅᴀᴛᴀʙᴀsᴇ ᴄʜᴀɴɴᴇʟs ᴄᴏɴғɪɢᴜʀᴇᴅ_\n\n"
 
     reply_markup = InlineKeyboardMarkup(
-        [[InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ", callback_data="back_to_db_management")]]
+        [
+            [
+                InlineKeyboardButton(
+                    "‹ ʙᴀᴄᴋ ᴛᴏ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ", callback_data="back_to_db_management"
+                )
+            ]
+        ]
     )
     await safe_edit_or_send(client, query, msg, reply_markup)
 
