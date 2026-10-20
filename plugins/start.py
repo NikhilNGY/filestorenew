@@ -1,11 +1,10 @@
 import asyncio
 import re
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Dict, Optional
 
 from pyrogram import Client, filters
 from pyrogram.errors import FloodWait
-from pyrogram.errors.pyromod import ListenerTimeout
 from pyrogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -23,11 +22,130 @@ from database.database import (
 )
 
 try:
+    from pyrogram.errors.pyromod import ListenerTimeout
+except ImportError:
+    class ListenerTimeout(Exception):
+        pass
+
+try:
     from texts import texts as render_texts_menu
     from texts import update_text_field
 except ImportError:
     render_texts_menu = None
     update_text_field = None
+
+
+# ==============================================================================
+# UNIVERSAL INPUT WAITER (SOLVES ALL BUTTON & LISTENER ISSUES)
+# ==============================================================================
+
+# Tracks active prompts per user_id so channel_post NEVER turns settings input into a link
+ACTIVE_INPUT_FUTURES: Dict[int, asyncio.Future] = {}
+
+
+@Client.on_message(filters.private & filters.incoming, group=-99)
+async def _capture_waiting_user_input(client: Client, message: Message):
+    """High-priority interceptor that routes user replies directly to waiting buttons."""
+    if not message.from_user:
+        return
+    user_id = message.from_user.id
+    fut = ACTIVE_INPUT_FUTURES.get(user_id)
+    if fut and not fut.done():
+        # If user sends a command like /start while waiting, cancel the wait and let command run
+        if message.text and message.text.startswith("/"):
+            ACTIVE_INPUT_FUTURES.pop(user_id, None)
+            fut.cancel()
+            return
+        ACTIVE_INPUT_FUTURES.pop(user_id, None)
+        fut.set_result(message)
+        message.stop_propagation()
+
+
+def has_active_listener(client: Client, user_id: int, chat_id: int = None) -> bool:
+    """Checks if the user is currently answering a settings button prompt or pyromod ask."""
+    if user_id in ACTIVE_INPUT_FUTURES and not ACTIVE_INPUT_FUTURES[user_id].done():
+        return True
+
+    waiting_set = getattr(client, "waiting_users", set())
+    if user_id in waiting_set or (chat_id and chat_id in waiting_set):
+        return True
+
+    listeners = getattr(client, "listeners", None)
+    if not listeners or not isinstance(listeners, dict):
+        return False
+
+    for key, val in listeners.items():
+        if not val:
+            continue
+        if key == user_id or key == chat_id:
+            return True
+        if isinstance(key, tuple) and (user_id in key or (chat_id and chat_id in key)):
+            return True
+        if isinstance(val, dict):
+            for sub_key, sub_val in val.items():
+                if not sub_val:
+                    continue
+                if sub_key == user_id or sub_key == chat_id:
+                    return True
+                if isinstance(sub_key, tuple) and (
+                    user_id in sub_key or (chat_id and chat_id in sub_key)
+                ):
+                    return True
+    return False
+
+
+def cancel_user_listeners(client: Client, user_id: int):
+    """Cancels any active button input prompt when user clicks Back, Cancel, or /start."""
+    fut = ACTIVE_INPUT_FUTURES.pop(user_id, None)
+    if fut and not fut.done():
+        fut.cancel()
+
+    if hasattr(client, "waiting_users") and isinstance(client.waiting_users, set):
+        client.waiting_users.discard(user_id)
+
+    listeners = getattr(client, "listeners", None)
+    if not listeners or not isinstance(listeners, dict):
+        return
+    for key in list(listeners.keys()):
+        if key == user_id or (isinstance(key, tuple) and user_id in key):
+            listeners.pop(key, None)
+        elif isinstance(listeners.get(key), dict):
+            sub_dict = listeners[key]
+            for sub_key in list(sub_dict.keys()):
+                if sub_key == user_id or (
+                    isinstance(sub_key, tuple) and user_id in sub_key
+                ):
+                    sub_dict.pop(sub_key, None)
+
+
+async def wait_for_user_input(
+    client: Client,
+    user_id: int,
+    timeout: int = 60,
+    expect_photo: bool = False,
+) -> Message:
+    """
+    Bulletproof replacement for client.listen().
+    Works across all Pyrogram/Pyrofork versions and prevents channel_post from firing.
+    """
+    cancel_user_listeners(client, user_id)
+    if not hasattr(client, "waiting_users"):
+        client.waiting_users = set()
+    client.waiting_users.add(user_id)
+
+    loop = asyncio.get_running_loop()
+    fut = loop.create_future()
+    ACTIVE_INPUT_FUTURES[user_id] = fut
+
+    try:
+        msg: Message = await asyncio.wait_for(fut, timeout=timeout)
+        return msg
+    except asyncio.TimeoutError:
+        raise ListenerTimeout()
+    finally:
+        ACTIVE_INPUT_FUTURES.pop(user_id, None)
+        if hasattr(client, "waiting_users"):
+            client.waiting_users.discard(user_id)
 
 
 # ==============================================================================
@@ -74,32 +192,6 @@ async def safe_edit_or_send(
             )
         except Exception as err:
             client.LOGGER(__name__, client.name).error(f"UI update error: {err}")
-
-
-def has_active_listener(client: Client, user_id: int, chat_id: int = None) -> bool:
-    """Checks if pyromod/pyrofork has an active listen/ask waiting for this user."""
-    listeners = getattr(client, "listeners", None)
-    if not listeners or not isinstance(listeners, dict):
-        return False
-
-    for key, val in listeners.items():
-        if not val:
-            continue
-        if key == user_id or key == chat_id:
-            return True
-        if isinstance(key, tuple) and (user_id in key or (chat_id and chat_id in key)):
-            return True
-    return False
-
-
-def cancel_user_listeners(client: Client, user_id: int):
-    """Cancels any lingering pyromod listeners when user clicks Back or Cancel."""
-    listeners = getattr(client, "listeners", None)
-    if not listeners or not isinstance(listeners, dict):
-        return
-    for key in list(listeners.keys()):
-        if key == user_id or (isinstance(key, tuple) and user_id in key):
-            listeners.pop(key, None)
 
 
 def parse_duration(duration_str: str) -> Optional[timedelta]:
@@ -169,7 +261,7 @@ def get_settings_text(client: Client) -> str:
 
 def is_valid_channel_id(text: str) -> bool:
     """Checks if a string is a valid integer (including negative IDs)."""
-    return text.lstrip("-").isdigit()
+    return text.strip().lstrip("-").isdigit()
 
 
 def is_admin(client: Client, user_id: int) -> bool:
@@ -980,9 +1072,14 @@ __sᴇɴᴅ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ɪᴅ (ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢ
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        if not res.text:
+            return await res.reply(
+                "**✗ Please send a valid text Channel ID.**",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("‹ ʙᴀᴄᴋ", callback_data="db_channels")]]
+                ),
+            )
         channel_id_text = res.text.strip()
 
         if not is_valid_channel_id(channel_id_text):
@@ -1087,10 +1184,8 @@ async def rm_db_channel(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        channel_id_text = res.text.strip()
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        channel_id_text = (res.text or "").strip()
 
         if not is_valid_channel_id(channel_id_text):
             return await res.reply(
@@ -1177,10 +1272,8 @@ async def set_primary_db(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        channel_id_text = res.text.strip()
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        channel_id_text = (res.text or "").strip()
 
         if not is_valid_channel_id(channel_id_text):
             return await res.reply(
@@ -1258,10 +1351,8 @@ async def toggle_db_status(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        channel_id_text = res.text.strip()
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        channel_id_text = (res.text or "").strip()
 
         if not is_valid_channel_id(channel_id_text):
             return await res.reply(
@@ -1348,10 +1439,8 @@ __Enter a new integer value for the auto delete timer (in seconds). Keep `0` to 
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        timer_str = res.text.strip()
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        timer_str = (res.text or "").strip()
 
         if timer_str.lstrip("+-").isdigit():
             timer = int(timer_str)
@@ -1492,10 +1581,8 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id,
-            filters=(filters.text | filters.photo),
-            timeout=60,
+        res = await wait_for_user_input(
+            client, query.from_user.id, timeout=60, expect_photo=True
         )
         if res.text and res.text.startswith(("https://", "http://")):
             client.messages["START_PHOTO"] = res.text.strip()
@@ -1556,10 +1643,8 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id,
-            filters=(filters.text | filters.photo),
-            timeout=60,
+        res = await wait_for_user_input(
+            client, query.from_user.id, timeout=60, expect_photo=True
         )
         if res.text and res.text.startswith(("https://", "http://")):
             client.messages["FSUB_PHOTO"] = res.text.strip()
@@ -1618,10 +1703,8 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id,
-            filters=(filters.text | filters.photo),
-            timeout=60,
+        res = await wait_for_user_input(
+            client, query.from_user.id, timeout=60, expect_photo=True
         )
         if res.text and res.text.startswith(("https://", "http://")):
             client.messages["SHORT_PIC"] = res.text.strip()
@@ -1723,9 +1806,6 @@ async def edit_text_settings(client: Client, query: CallbackQuery):
     }
     db_key, label = key_map[query.data]
 
-    if update_text_field is not None:
-        return await update_text_field(client, query, db_key, label)
-
     await safe_edit_or_send(
         client,
         query,
@@ -1735,10 +1815,8 @@ async def edit_text_settings(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        if res.text.strip() == "0":
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        if not res.text or res.text.strip() == "0":
             return await texts_menu(client, query)
 
         new_val = res.text.html if hasattr(res.text, "html") else res.text
@@ -1843,10 +1921,15 @@ async def shortner_set_values_cb(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        res = await client.listen(
-            user_id=query.from_user.id, filters=filters.text, timeout=60
-        )
-        val = res.text.strip()
+        res = await wait_for_user_input(client, query.from_user.id, timeout=60)
+        val = (res.text or "").strip()
+        if not val:
+            return await res.reply(
+                "**❌ Invalid value!**",
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="shortner")]]
+                ),
+            )
         setattr(client, attr_name, val)
         await client.mongodb.update_shortner_setting(attr_name, val)
         await res.reply(
