@@ -1,2 +1,5 @@
-pip install -r requirements.txt --no-cache-dir
-python3 main.py
+#!/bin/bash
+set -e
+
+# Launch the bot directly (dependencies are already pre-installed in the Docker image)
+exec python3 -O main.py
