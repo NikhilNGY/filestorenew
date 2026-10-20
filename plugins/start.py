@@ -24,8 +24,10 @@ from database.database import (
 try:
     from pyrogram.errors.pyromod import ListenerTimeout
 except ImportError:
+
     class ListenerTimeout(Exception):
         pass
+
 
 try:
     from texts import texts as render_texts_menu
