@@ -1,3 +1,4 @@
+import asyncio
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -24,7 +25,7 @@ try:
 except ImportError:
     from __init__ import web_server
 
-version = "v2.0.0"
+version = "v2.1.0"
 
 
 # ============================================================================ #
@@ -90,6 +91,7 @@ class Bot(Client):
             plugins={"root": "plugins"},
             workers=workers,
             bot_token=token,
+            in_memory=True,
         )
 
         _ensure_listeners(self)
@@ -128,7 +130,7 @@ class Bot(Client):
         self.worker_clients = {}
 
     async def _register_bot_commands(self):
-        """Registers the Telegram '/' command menu for all users and admins."""
+        """Registers the Telegram '/' command menu in the background without slowing startup."""
         user_commands = [
             BotCommand("start", "🚀 Start the bot & get files"),
             BotCommand("profile", "👤 View your subscription plan"),
@@ -164,13 +166,41 @@ class Bot(Client):
                 f"Could not set default user commands: {e}"
             )
 
-        for admin_id in set(self.admins + [self.owner]):
-            try:
-                await self.set_bot_commands(
+        await asyncio.gather(
+            *(
+                self.set_bot_commands(
                     admin_commands, scope=BotCommandScopeChat(chat_id=int(admin_id))
                 )
-            except Exception:
-                pass
+                for admin_id in set(self.admins + [self.owner])
+            ),
+            return_exceptions=True,
+        )
+
+    async def _load_static_fsub_channel(self, channel):
+        """Helper to load a single static FSub channel concurrently."""
+        try:
+            chat = await self.get_chat(channel[0])
+            name = chat.title
+            link = None
+            if not channel[1]:
+                link = chat.invite_link
+            if not link and not channel[2]:
+                chat_link = await self.create_chat_invite_link(
+                    channel[0], creates_join_request=channel[1]
+                )
+                link = chat_link.invite_link
+            if not channel[1]:
+                self.fsub_dict[channel[0]] = [name, link, False, 0]
+            if channel[1]:
+                self.fsub_dict[channel[0]] = [name, link, True, 0]
+                if channel[0] not in self.req_channels:
+                    self.req_channels.append(channel[0])
+            if channel[2] > 0:
+                self.fsub_dict[channel[0]] = [name, None, channel[1], channel[2]]
+        except Exception as e:
+            self.LOGGER(__name__, self.name).warning(
+                f"Bot can't Export Invite link from Force Sub Channel {channel[0]}: {e}"
+            )
 
     async def start(self):
         await super().start()
@@ -180,44 +210,53 @@ class Bot(Client):
         self.uptime = datetime.now()
         self.username = usr_bot_me.username
 
-        # 1. Initialize Multi-Database (/datadb)
+        # 1. Fetch all MongoDB settings concurrently for ultra-fast startup
         try:
-            await self.mongodb.init_multi_db(self)
-        except Exception as e:
-            self.LOGGER(__name__, self.name).warning(
-                f"Error initializing Multi-DB: {e}"
+            (
+                _,
+                saved_admins,
+                saved_messages,
+                bot_settings,
+                shortner_cfg,
+                db_fsub_channels,
+                db_channels_data,
+            ) = await asyncio.gather(
+                self.mongodb.init_multi_db(self),
+                self.mongodb.get_admins_list(),
+                self.mongodb.get_messages_settings(),
+                self.mongodb.get_bot_settings(),
+                self.mongodb.get_shortner_settings(),
+                self.mongodb.get_fsub_channels(),
+                self.mongodb.get_db_channels(),
+                return_exceptions=True,
             )
 
-        # 2. Load Persistent Bot Settings, Messages, Shortener & Admins
-        try:
-            saved_admins = await self.mongodb.get_admins_list()
-            for admin_id in saved_admins:
-                if admin_id not in self.admins:
-                    self.admins.append(admin_id)
+            if isinstance(saved_admins, list):
+                for admin_id in saved_admins:
+                    if admin_id not in self.admins:
+                        self.admins.append(admin_id)
 
-            saved_messages = await self.mongodb.get_messages_settings()
-            if saved_messages:
+            if isinstance(saved_messages, dict) and saved_messages:
                 self.messages.update(saved_messages)
                 if "REPLY" in saved_messages:
                     self.reply_text = saved_messages["REPLY"]
 
-            bot_settings = await self.mongodb.get_bot_settings()
-            if "auto_del" in bot_settings:
-                self.auto_del = int(bot_settings["auto_del"])
-            if "protect" in bot_settings:
-                self.protect = bool(bot_settings["protect"])
-            if "disable_btn" in bot_settings:
-                self.disable_btn = bool(bot_settings["disable_btn"])
-            if "fsub_enabled" in bot_settings:
-                self.fsub_enabled = bool(bot_settings["fsub_enabled"])
-            if "auto_rotate" in bot_settings:
-                self.auto_rotate = bool(bot_settings["auto_rotate"])
-            if "reply_text" in bot_settings and bot_settings["reply_text"]:
-                self.reply_text = bot_settings["reply_text"]
-                self.messages["REPLY"] = bot_settings["reply_text"]
+            if isinstance(bot_settings, dict):
+                if "auto_del" in bot_settings:
+                    self.auto_del = int(bot_settings["auto_del"])
+                if "protect" in bot_settings:
+                    self.protect = bool(bot_settings["protect"])
+                if "disable_btn" in bot_settings:
+                    self.disable_btn = bool(bot_settings["disable_btn"])
+                if "fsub_enabled" in bot_settings:
+                    self.fsub_enabled = bool(bot_settings["fsub_enabled"])
+                if "auto_rotate" in bot_settings:
+                    self.auto_rotate = bool(bot_settings["auto_rotate"])
+                if "reply_text" in bot_settings and bot_settings["reply_text"]:
+                    self.reply_text = bot_settings["reply_text"]
+                    self.messages["REPLY"] = bot_settings["reply_text"]
 
-            shortner_cfg = await self.mongodb.get_shortner_settings()
-            if shortner_cfg:
+            if isinstance(shortner_cfg, dict) and shortner_cfg:
                 self.shortner_enabled = shortner_cfg.get(
                     "enabled", self.shortner_enabled
                 )
@@ -230,41 +269,18 @@ class Bot(Client):
             self.LOGGER(__name__, self.name).warning(
                 f"Error loading saved settings: {e}"
             )
+            db_fsub_channels = {}
+            db_channels_data = {}
 
-        # 3. Load Static FSub Channels from config.py
-        if len(self.fsub) > 0:
-            for channel in self.fsub:
-                try:
-                    chat = await self.get_chat(channel[0])
-                    name = chat.title
-                    link = None
-                    if not channel[1]:
-                        link = chat.invite_link
-                    if not link and not channel[2]:
-                        chat_link = await self.create_chat_invite_link(
-                            channel[0], creates_join_request=channel[1]
-                        )
-                        link = chat_link.invite_link
-                    if not channel[1]:
-                        self.fsub_dict[channel[0]] = [name, link, False, 0]
-                    if channel[1]:
-                        self.fsub_dict[channel[0]] = [name, link, True, 0]
-                        self.req_channels.append(channel[0])
-                    if channel[2] > 0:
-                        self.fsub_dict[channel[0]] = [
-                            name,
-                            None,
-                            channel[1],
-                            channel[2],
-                        ]
-                except Exception as e:
-                    self.LOGGER(__name__, self.name).warning(
-                        f"Bot can't Export Invite link from Force Sub Channel: {e}"
-                    )
+        # 2. Load Static FSub Channels Concurrently
+        if self.fsub:
+            await asyncio.gather(
+                *(self._load_static_fsub_channel(ch) for ch in self.fsub),
+                return_exceptions=True,
+            )
 
-        # 4. Load Dynamically Added FSub Channels from Database
-        try:
-            db_fsub_channels = await self.mongodb.get_fsub_channels()
+        # 3. Load Dynamically Added FSub Channels from Database
+        if isinstance(db_fsub_channels, dict):
             for channel_id_raw, channel_data in db_fsub_channels.items():
                 channel_id = int(channel_id_raw)
                 if channel_id in self.fsub_dict:
@@ -280,19 +296,13 @@ class Bot(Client):
                         f"Could not load dynamic fsub channel {channel_id}: {e}"
                     )
                     await self.mongodb.remove_fsub_channel(channel_id)
-        except Exception as e:
-            self.LOGGER(__name__, self.name).warning(
-                f"Error loading dynamic fsub channels: {e}"
-            )
 
         await self.mongodb.set_channels(self.req_channels)
 
-        # 5. Load DB Channels from Database
-        try:
-            db_channels_data = await self.mongodb.get_db_channels()
-            self.db_channels = {}
-            self.primary_db_channel = self.db
-
+        # 4. Load DB Channels from Database
+        self.db_channels = {}
+        self.primary_db_channel = self.db
+        if isinstance(db_channels_data, dict):
             for channel_id_str, channel_data in db_channels_data.items():
                 channel_id = int(channel_id_str)
                 try:
@@ -308,10 +318,8 @@ class Bot(Client):
                         f"Could not load DB channel {channel_id}: {e}"
                     )
                     await self.mongodb.remove_db_channel(channel_id)
-        except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Error loading DB channels: {e}")
 
-        # 6. Verify Primary DB Channel Access
+        # 5. Verify Primary DB Channel Access
         try:
             db_channel = await self.get_chat(self.db)
             self.db_channel = db_channel
@@ -333,16 +341,19 @@ class Bot(Client):
             )
             sys.exit(1)
 
-        # 7. Start Connected Worker Bots (/bots) if any exist
-        try:
-            from plugins.others import start_all_worker_bots
+        # 6. Start Worker Bots & Register Commands in Background (Non-Blocking Startup!)
+        async def _post_startup_tasks():
+            try:
+                from plugins.others import start_all_worker_bots
 
-            await start_all_worker_bots(self)
-        except Exception as e:
-            self.LOGGER(__name__, self.name).warning(f"Worker bots startup notice: {e}")
+                await start_all_worker_bots(self)
+            except Exception as e:
+                self.LOGGER(__name__, self.name).warning(
+                    f"Worker bots startup notice: {e}"
+                )
+            await self._register_bot_commands()
 
-        # 8. Register '/' Command Menu in Telegram
-        await self._register_bot_commands()
+        asyncio.create_task(_post_startup_tasks())
 
         self.LOGGER(__name__, self.name).info("Bot Started Successfully!!")
 
@@ -355,11 +366,11 @@ class Bot(Client):
             )
 
     async def stop(self, *args):
-        for w_id, w_client in list(self.worker_clients.items()):
-            try:
-                await w_client.stop()
-            except Exception:
-                pass
+        if self.worker_clients:
+            await asyncio.gather(
+                *(w.stop() for w in list(self.worker_clients.values())),
+                return_exceptions=True,
+            )
         await super().stop()
         self.LOGGER(__name__, self.name).info("Bot stopped.")
 
