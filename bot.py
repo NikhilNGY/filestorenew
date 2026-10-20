@@ -2,11 +2,16 @@ import sys
 from collections import defaultdict
 from datetime import datetime
 
-import pyromod.listen
 from aiohttp import web
 from pyrogram import Client
+from pyrogram.types import (
+    BotCommand,
+    BotCommandScopeAllPrivateChats,
+    BotCommandScopeChat,
+)
 
 try:
+    import pyromod.listen  # noqa: F401
     from pyromod.listen import ListenerTypes
 except ImportError:
     ListenerTypes = None
@@ -111,7 +116,7 @@ class Bot(Client):
         self.db_channels = {}
         self.primary_db_channel = db
 
-        # Dynamic feature attributes
+        # Dynamic feature attributes (seeded from config.py defaults)
         self.fsub_enabled = True
         self.auto_rotate = False
         self.multi_db_enabled = True
@@ -121,6 +126,51 @@ class Bot(Client):
         self.short_api = SHORT_API or ""
         self.tutorial_link = SHORT_TUT or "https://t.me/How_to_Download_7x/26"
         self.worker_clients = {}
+
+    async def _register_bot_commands(self):
+        """Registers the Telegram '/' command menu for all users and admins."""
+        user_commands = [
+            BotCommand("start", "🚀 Start the bot & get files"),
+            BotCommand("profile", "👤 View your subscription plan"),
+            BotCommand("request", "📩 Request content (Premium)"),
+        ]
+        admin_commands = user_commands + [
+            BotCommand("settings", "⚙️ Open unified bot settings panel"),
+            BotCommand("forcesub", "📢 Manage Force Subscribe channels"),
+            BotCommand("db", "📂 Manage Telegram DB channels"),
+            BotCommand("datadb", "🗄️ Manage Multi-Database (MongoDB URLs)"),
+            BotCommand("bots", "🤖 Manage delivery Worker Bots"),
+            BotCommand("otherbots", "💬 Configure Worker Bots universal reply"),
+            BotCommand("genlink", "🔗 Generate link for a single post"),
+            BotCommand("batch", "📦 Generate batch link for multiple posts"),
+            BotCommand("nbatch", "🔢 Generate batch link by count"),
+            BotCommand("broadcast", "📣 Broadcast message to all users"),
+            BotCommand("pbroadcast", "📌 Broadcast & pin message to all users"),
+            BotCommand("stats", "📊 View system & bot usage statistics"),
+            BotCommand("users", "👥 View total registered users count"),
+            BotCommand("ban", "🚫 Ban user(s) by ID"),
+            BotCommand("unban", "✅ Unban user(s) by ID"),
+            BotCommand("addpremium", "💎 Grant Premium access to a user"),
+            BotCommand("delpremium", "❌ Revoke Premium access from a user"),
+            BotCommand("premiumusers", "📋 List all active Premium users"),
+        ]
+
+        try:
+            await self.set_bot_commands(
+                user_commands, scope=BotCommandScopeAllPrivateChats()
+            )
+        except Exception as e:
+            self.LOGGER(__name__, self.name).warning(
+                f"Could not set default user commands: {e}"
+            )
+
+        for admin_id in set(self.admins + [self.owner]):
+            try:
+                await self.set_bot_commands(
+                    admin_commands, scope=BotCommandScopeChat(chat_id=int(admin_id))
+                )
+            except Exception:
+                pass
 
     async def start(self):
         await super().start()
@@ -164,6 +214,7 @@ class Bot(Client):
                 self.auto_rotate = bool(bot_settings["auto_rotate"])
             if "reply_text" in bot_settings and bot_settings["reply_text"]:
                 self.reply_text = bot_settings["reply_text"]
+                self.messages["REPLY"] = bot_settings["reply_text"]
 
             shortner_cfg = await self.mongodb.get_shortner_settings()
             if shortner_cfg:
@@ -289,6 +340,9 @@ class Bot(Client):
             await start_all_worker_bots(self)
         except Exception as e:
             self.LOGGER(__name__, self.name).warning(f"Worker bots startup notice: {e}")
+
+        # 8. Register '/' Command Menu in Telegram
+        await self._register_bot_commands()
 
         self.LOGGER(__name__, self.name).info("Bot Started Successfully!!")
 
