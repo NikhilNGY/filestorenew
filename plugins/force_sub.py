@@ -12,6 +12,7 @@ from pyrogram.types import (
 
 from config import OWNER_ID
 from database.database import is_bot_admin
+from plugins.start import safe_edit_or_send
 
 
 def is_admin(client: Client, user_id: int) -> bool:
@@ -225,11 +226,9 @@ async def fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    await query.answer()
     msg, reply_markup = get_fsub_text_and_markup(client)
-    try:
-        await query.message.edit_text(msg, reply_markup=reply_markup)
-    except Exception:
-        pass
+    await safe_edit_or_send(client, query, msg, reply_markup)
 
 
 # =============================================================== #
@@ -248,7 +247,8 @@ async def toggle_fsub_cb(client: Client, query: CallbackQuery):
 
     status_str = "Enabled ✅" if client.fsub_enabled else "Disabled ❌"
     await query.answer(f"Force Subscribe is now {status_str}", show_alert=False)
-    await fsub(client, query)
+    msg, reply_markup = get_fsub_text_and_markup(client)
+    await safe_edit_or_send(client, query, msg, reply_markup)
 
 
 @Client.on_callback_query(filters.regex("^toggle_rotate$"))
@@ -262,7 +262,8 @@ async def toggle_rotate_cb(client: Client, query: CallbackQuery):
 
     status_str = "Enabled ✅" if client.auto_rotate else "Disabled ❌"
     await query.answer(f"Auto Rotate is now {status_str}", show_alert=False)
-    await fsub(client, query)
+    msg, reply_markup = get_fsub_text_and_markup(client)
+    await safe_edit_or_send(client, query, msg, reply_markup)
 
 
 @Client.on_callback_query(filters.regex("^add_fsub$"))
@@ -272,19 +273,30 @@ async def add_fsub(client: Client, query: CallbackQuery):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     await query.answer()
+    await safe_edit_or_send(
+        client,
+        query,
+        "<blockquote>**➕ ᴀᴅᴅ ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟ**</blockquote>\n\n"
+        "Send **channel id** (negative integer), **request boolean** (`yes`/`no`/`true`/`false`), and **timer** (integer in minutes, `0` for no timer) separated by spaces in the next 60 seconds!\n\n"
+        "<blockquote expandable>**Example:** `-10089479289 yes 5`\n\n"
+        "• `-10089479289` = Force Sub channel ID\n"
+        "• `yes` = Join Request link enabled\n"
+        "• `5` = Invite link expires after 5 minutes</blockquote>",
+        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]),
+    )
     try:
-        ask_channel_info = await client.ask(
-            query.from_user.id,
-            "Send **channel id** (negative integer), **request boolean** (`yes`/`no`/`true`/`false`), and **timer** (integer in minutes, `0` for no timer) separated by spaces in the next 60 seconds!\n\n"
-            "<blockquote expandable>**Example:** `-10089479289 yes 5`\n\n"
-            "• `-10089479289` = Force Sub channel ID\n"
-            "• `yes` = Join Request link enabled\n"
-            "• `5` = Invite link expires after 5 minutes</blockquote>",
+        ask_channel_info = await client.listen(
+            user_id=query.from_user.id,
             filters=filters.text,
             timeout=60,
         )
     except ListenerTimeout:
-        return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
+        return await safe_edit_or_send(
+            client,
+            query,
+            "**⏰ Timeout! Operation cancelled.**",
+            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+        )
     except Exception:
         return
 
@@ -292,7 +304,8 @@ async def add_fsub(client: Client, query: CallbackQuery):
         channel_info = ask_channel_info.text.split()
         if len(channel_info) != 3:
             return await ask_channel_info.reply(
-                "**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**"
+                "**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
             )
 
         channel_id_str, request_str, timer_str = channel_info
@@ -300,12 +313,16 @@ async def add_fsub(client: Client, query: CallbackQuery):
 
         if _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply(
-                "**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**"
+                "**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
             )
 
         val, res = await is_bot_admin(client, channel_id)
         if not val:
-            return await ask_channel_info.reply(f"**✗ Error:** `{res}`")
+            return await ask_channel_info.reply(
+                f"**✗ Error:** `{res}`",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+            )
 
         if request_str.lower() in ("true", "on", "yes"):
             request = True
@@ -313,14 +330,16 @@ async def add_fsub(client: Client, query: CallbackQuery):
             request = False
         else:
             return await ask_channel_info.reply(
-                "**✗ Invalid request value! Use `yes` or `no`.**"
+                "**✗ Invalid request value! Use `yes` or `no`.**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
             )
 
         if timer_str.isdigit():
             timer = int(timer_str)
         else:
             return await ask_channel_info.reply(
-                "**✗ Timer must be a valid non-negative integer!**"
+                "**✗ Timer must be a valid non-negative integer!**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
             )
 
         chat = await client.get_chat(channel_id)
@@ -340,12 +359,16 @@ async def add_fsub(client: Client, query: CallbackQuery):
             await client.mongodb.set_channels(client.req_channels)
 
         await client.mongodb.add_fsub_channel(channel_id, client.fsub_dict[channel_id])
-        await fsub(client, query)
+        msg, reply_markup = get_fsub_text_and_markup(client)
+        await safe_edit_or_send(client, query, msg, reply_markup)
         return await ask_channel_info.reply(
             f"**✓ Channel `{name.strip()}` (`{channel_id}`) has been added to Force Subscribe!**"
         )
     except Exception as e:
-        return await ask_channel_info.reply(f"**✗ Error:** `{e}`")
+        return await ask_channel_info.reply(
+            f"**✗ Error:** `{e}`",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+        )
 
 
 @Client.on_callback_query(filters.regex("^rm_fsub$"))
@@ -355,15 +378,26 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     await query.answer()
+    await safe_edit_or_send(
+        client,
+        query,
+        "<blockquote>**➖ ʀᴇᴍᴏᴠᴇ ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟ**</blockquote>\n\n"
+        "Send the **channel ID** (negative integer value) to remove in the next 60 seconds!",
+        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]),
+    )
     try:
-        ask_channel_info = await client.ask(
-            query.from_user.id,
-            "Send the **channel ID** (negative integer value) to remove in the next 60 seconds!",
+        ask_channel_info = await client.listen(
+            user_id=query.from_user.id,
             filters=filters.text,
             timeout=60,
         )
     except ListenerTimeout:
-        return await query.message.reply("**⏰ Timeout! Operation cancelled.**")
+        return await safe_edit_or_send(
+            client,
+            query,
+            "**⏰ Timeout! Operation cancelled.**",
+            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+        )
     except Exception:
         return
 
@@ -371,7 +405,8 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         channel_id = int(ask_channel_info.text.strip())
         if not _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply(
-                "**✗ This channel ID is not in the Force Sub list!**"
+                "**✗ This channel ID is not in the Force Sub list!**",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
             )
 
         if channel_id in client.req_channels:
@@ -382,12 +417,16 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         client.fsub_dict.pop(str(channel_id), None)
         await client.mongodb.remove_fsub_channel(channel_id)
 
-        await fsub(client, query)
+        msg, reply_markup = get_fsub_text_and_markup(client)
+        await safe_edit_or_send(client, query, msg, reply_markup)
         return await ask_channel_info.reply(
             f"**✓ Channel `{channel_id}` has been removed from Force Subscribe!**"
         )
     except Exception as e:
-        return await ask_channel_info.reply(f"**✗ Error:** `{e}`")
+        return await ask_channel_info.reply(
+            f"**✗ Error:** `{e}`",
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+        )
 
 
 @Client.on_callback_query(filters.regex("^getall_fsub$"))
@@ -419,9 +458,7 @@ async def getall_fsub(client: Client, query: CallbackQuery):
     markup = InlineKeyboardMarkup(
         [[InlineKeyboardButton("◂ ʙᴀᴄᴋ ᴛᴏ ꜰsᴜʙ ᴍᴇɴᴜ", callback_data="fsub")]]
     )
-    await query.message.edit_text(
-        "\n".join(details), reply_markup=markup, disable_web_page_preview=True
-    )
+    await safe_edit_or_send(client, query, "\n".join(details), markup)
 
 
 @Client.on_callback_query(filters.regex("^rmall_fsub$"))
@@ -444,9 +481,11 @@ async def rmall_fsub(client: Client, query: CallbackQuery):
             ]
         ]
     )
-    await query.message.edit_text(
+    await safe_edit_or_send(
+        client,
+        query,
         "**⚠️ Are you sure you want to remove ALL Force Subscribe channels?**\n\n__This action will clear all channels from memory and database!__",
-        reply_markup=markup,
+        markup,
     )
 
 
@@ -472,6 +511,7 @@ async def confirm_rmall_fsub(client: Client, query: CallbackQuery):
         await query.answer(
             "✅ All Force Sub channels have been removed!", show_alert=True
         )
-        await fsub(client, query)
+        msg, reply_markup = get_fsub_text_and_markup(client)
+        await safe_edit_or_send(client, query, msg, reply_markup)
     except Exception as e:
         await query.answer(f"Error removing channels: {e}", show_alert=True)
