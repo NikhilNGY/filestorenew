@@ -1,6 +1,5 @@
 from pyrogram import Client, filters
 from pyrogram.enums import ChatMemberStatus
-from pyrogram.errors.pyromod import ListenerTimeout
 from pyrogram.types import (
     CallbackQuery,
     ChatJoinRequest,
@@ -12,7 +11,12 @@ from pyrogram.types import (
 
 from config import OWNER_ID
 from database.database import is_bot_admin
-from plugins.start import safe_edit_or_send
+from plugins.start import (
+    ListenerTimeout,
+    cancel_user_listeners,
+    safe_edit_or_send,
+    wait_for_user_input,
+)
 
 
 def is_admin(client: Client, user_id: int) -> bool:
@@ -216,6 +220,7 @@ async def forcesub_command(client: Client, message: Message):
     if not is_admin(client, message.from_user.id):
         return await message.reply("**⚠️ You are not authorized to use this command!**")
 
+    cancel_user_listeners(client, message.from_user.id)
     msg, reply_markup = get_fsub_text_and_markup(client)
     await message.reply_text(msg, reply_markup=reply_markup)
 
@@ -226,7 +231,7 @@ async def fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
+    cancel_user_listeners(client, query.from_user.id)
     msg, reply_markup = get_fsub_text_and_markup(client)
     await safe_edit_or_send(client, query, msg, reply_markup)
 
@@ -272,7 +277,6 @@ async def add_fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
     await safe_edit_or_send(
         client,
         query,
@@ -287,10 +291,8 @@ async def add_fsub(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        ask_channel_info = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
+        ask_channel_info = await wait_for_user_input(
+            client, query.from_user.id, timeout=60
         )
     except ListenerTimeout:
         return await safe_edit_or_send(
@@ -305,7 +307,7 @@ async def add_fsub(client: Client, query: CallbackQuery):
         return
 
     try:
-        channel_info = ask_channel_info.text.split()
+        channel_info = (ask_channel_info.text or "").split()
         if len(channel_info) != 3:
             return await ask_channel_info.reply(
                 "**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**",
@@ -393,7 +395,6 @@ async def rm_fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
-    await query.answer()
     await safe_edit_or_send(
         client,
         query,
@@ -404,10 +405,8 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        ask_channel_info = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
+        ask_channel_info = await wait_for_user_input(
+            client, query.from_user.id, timeout=60
         )
     except ListenerTimeout:
         return await safe_edit_or_send(
@@ -422,7 +421,7 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         return
 
     try:
-        channel_id = int(ask_channel_info.text.strip())
+        channel_id = int((ask_channel_info.text or "").strip())
         if not _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply(
                 "**✗ This channel ID is not in the Force Sub list!**",
@@ -459,12 +458,12 @@ async def getall_fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    cancel_user_listeners(client, query.from_user.id)
     if not getattr(client, "fsub_dict", {}):
         return await query.answer(
             "No Force Sub channels are currently configured!", show_alert=True
         )
 
-    await query.answer()
     details = ["**📋 All Force Subscription Channels:**\n"]
     for idx, (cid, data) in enumerate(client.fsub_dict.items(), 1):
         name = data[0] if len(data) > 0 else "Unknown"
@@ -491,10 +490,10 @@ async def rmall_fsub(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    cancel_user_listeners(client, query.from_user.id)
     if not getattr(client, "fsub_dict", {}):
         return await query.answer("Force Sub list is already empty!", show_alert=True)
 
-    await query.answer()
     markup = InlineKeyboardMarkup(
         [
             [
