@@ -1,6 +1,12 @@
 import asyncio
 
-import pyromod.listen
+try:
+    import uvloop
+    uvloop.install()
+except ImportError:
+    pass
+
+import pyromod.listen  # noqa: F401
 from pyrogram import idle
 
 from bot import Bot, web_app
@@ -23,7 +29,7 @@ from config import (
 
 
 async def runner():
-    # 1. Start the web server FIRST so deployment health checks on PORT 5010 pass immediately
+    # 1. Start the web server FIRST so deployment health checks on PORT 5010 pass in <100ms
     await web_app()
 
     # 2. Initialize and start the Bot client
