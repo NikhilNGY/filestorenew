@@ -13,7 +13,6 @@ from pyrogram.errors import (
     PeerIdInvalid,
     UserIsBlocked,
 )
-from pyrogram.errors.pyromod import ListenerTimeout
 from pyrogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -24,10 +23,12 @@ from pyrogram.types import (
 from config import OWNER_ID
 from database.database import encode, get_message_id
 from plugins.start import (
+    ListenerTimeout,
     cancel_user_listeners,
     has_active_listener,
     is_admin,
     safe_edit_or_send,
+    wait_for_user_input,
 )
 
 # =============================================================== #
@@ -79,11 +80,7 @@ async def add_new_admins(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        ids_msg = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
-        )
+        ids_msg = await wait_for_user_input(client, query.from_user.id, timeout=60)
     except ListenerTimeout:
         return await safe_edit_or_send(
             client,
@@ -96,7 +93,7 @@ async def add_new_admins(client: Client, query: CallbackQuery):
     except Exception:
         return
 
-    ids = ids_msg.text.split()
+    ids = (ids_msg.text or "").split()
     added_count = 0
     try:
         for identifier in ids:
@@ -135,11 +132,7 @@ async def remove_admins(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        ids_msg = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
-        )
+        ids_msg = await wait_for_user_input(client, query.from_user.id, timeout=60)
     except ListenerTimeout:
         return await safe_edit_or_send(
             client,
@@ -152,7 +145,7 @@ async def remove_admins(client: Client, query: CallbackQuery):
     except Exception:
         return
 
-    ids = ids_msg.text.split()
+    ids = (ids_msg.text or "").split()
     removed_count = 0
     try:
         for identifier in ids:
@@ -531,11 +524,7 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
     )
 
     try:
-        ask_info = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
-        )
+        ask_info = await wait_for_user_input(client, query.from_user.id, timeout=60)
     except ListenerTimeout:
         return await safe_edit_or_send(
             client,
@@ -548,7 +537,14 @@ async def multidb_add_cb(client: Client, query: CallbackQuery):
     except Exception:
         return
 
-    text = ask_info.text.strip()
+    text = (ask_info.text or "").strip()
+    if not text:
+        return await ask_info.reply(
+            "**✗ Invalid input!**",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="datadb_menu")]]
+            ),
+        )
     parts = text.split(maxsplit=1)
 
     if len(parts) == 1:
@@ -685,11 +681,7 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
         ),
     )
     try:
-        ask_rm = await client.listen(
-            user_id=query.from_user.id,
-            filters=filters.text,
-            timeout=60,
-        )
+        ask_rm = await wait_for_user_input(client, query.from_user.id, timeout=60)
     except ListenerTimeout:
         return await safe_edit_or_send(
             client,
@@ -702,7 +694,7 @@ async def multidb_rm_prompt_cb(client: Client, query: CallbackQuery):
     except Exception:
         return
 
-    target = ask_rm.text.strip()
+    target = (ask_rm.text or "").strip()
     removed_entry = None
     for entry in list(client.db_urls):
         if (
@@ -1154,14 +1146,14 @@ async def batch(client: Client, message: Message):
 
     while True:
         try:
-            first_message = await client.ask(
-                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+            await message.reply(
+                f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
 {db_channels_info}
 
-<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
-                chat_id=message.from_user.id,
-                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60,
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>"""
+            )
+            first_message = await wait_for_user_input(
+                client, message.from_user.id, timeout=60
             )
         except Exception:
             return
@@ -1177,14 +1169,14 @@ async def batch(client: Client, message: Message):
 
     while True:
         try:
-            second_message = await client.ask(
-                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ʟᴀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+            await message.reply(
+                f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴛʜᴇ ʟᴀsᴛ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
 {db_channels_info}
 
-<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
-                chat_id=message.from_user.id,
-                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60,
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>"""
+            )
+            second_message = await wait_for_user_input(
+                client, message.from_user.id, timeout=60
             )
         except Exception:
             return
@@ -1229,15 +1221,15 @@ async def link_generator(client: Client, message: Message):
 
     while True:
         try:
-            channel_message = await client.ask(
-                text=f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
+            await message.reply(
+                f"""<blockquote>ꜰᴏʀᴡᴀʀᴅ ᴍᴇssᴀɢᴇ ꜰʀᴏᴍ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)..</blockquote>
 
 {db_channels_info}
 
-<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>""",
-                chat_id=message.from_user.id,
-                filters=(filters.forwarded | (filters.text & ~filters.forwarded)),
-                timeout=60,
+<blockquote>ᴏʀ sᴇɴᴅ ᴛʜᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ ᴘᴏsᴛ ʟɪɴᴋ</blockquote>"""
+            )
+            channel_message = await wait_for_user_input(
+                client, message.from_user.id, timeout=60
             )
         except Exception:
             return
@@ -1287,13 +1279,13 @@ async def nbatch(client: Client, message: Message):
 
     while True:
         try:
-            first_message = await client.ask(
-                text=f"""<blockquote>🚀 sᴇɴᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ʟɪɴᴋ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)...</blockquote>
+            await message.reply(
+                f"""<blockquote>🚀 sᴇɴᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ ꜰɪʀsᴛ ᴍᴇssᴀɢᴇ ʟɪɴᴋ (ᴡɪᴛʜ ǫᴜᴏᴛᴇs)...</blockquote>
 
-{db_channels_info}""",
-                chat_id=message.from_user.id,
-                filters=(filters.text & ~filters.forwarded),
-                timeout=60,
+{db_channels_info}"""
+            )
+            first_message = await wait_for_user_input(
+                client, message.from_user.id, timeout=60
             )
         except Exception:
             return
@@ -1351,7 +1343,7 @@ async def is_not_numeric_or_listening(client: Client, _, message: Message):
     chat_id = message.chat.id if message.chat else None
     if user_id and has_active_listener(client, user_id, chat_id):
         return False
-    if message.text and message.text.lstrip("+-").isdigit():
+    if message.text and message.text.strip().lstrip("+-").isdigit():
         return False
     return True
 
