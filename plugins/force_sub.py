@@ -282,7 +282,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
         "• `-10089479289` = Force Sub channel ID\n"
         "• `yes` = Join Request link enabled\n"
         "• `5` = Invite link expires after 5 minutes</blockquote>",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]
+        ),
     )
     try:
         ask_channel_info = await client.listen(
@@ -295,7 +297,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+            ),
         )
     except Exception:
         return
@@ -305,7 +309,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
         if len(channel_info) != 3:
             return await ask_channel_info.reply(
                 "**✗ Invalid format! Please send 3 values: `<channel_id> <request> <timer>`**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         channel_id_str, request_str, timer_str = channel_info
@@ -314,14 +320,18 @@ async def add_fsub(client: Client, query: CallbackQuery):
         if _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply(
                 "**✗ This channel ID already exists in the Force Sub list! Remove it first to change its configuration.**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         val, res = await is_bot_admin(client, channel_id)
         if not val:
             return await ask_channel_info.reply(
                 f"**✗ Error:** `{res}`",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         if request_str.lower() in ("true", "on", "yes"):
@@ -331,7 +341,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
         else:
             return await ask_channel_info.reply(
                 "**✗ Invalid request value! Use `yes` or `no`.**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         if timer_str.isdigit():
@@ -339,7 +351,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
         else:
             return await ask_channel_info.reply(
                 "**✗ Timer must be a valid non-negative integer!**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         chat = await client.get_chat(channel_id)
@@ -367,7 +381,9 @@ async def add_fsub(client: Client, query: CallbackQuery):
     except Exception as e:
         return await ask_channel_info.reply(
             f"**✗ Error:** `{e}`",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+            ),
         )
 
 
@@ -383,7 +399,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         query,
         "<blockquote>**➖ ʀᴇᴍᴏᴠᴇ ꜰᴏʀᴄᴇ sᴜʙ ᴄʜᴀɴɴᴇʟ**</blockquote>\n\n"
         "Send the **channel ID** (negative integer value) to remove in the next 60 seconds!",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="fsub")]]
+        ),
     )
     try:
         ask_channel_info = await client.listen(
@@ -396,7 +414,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
             client,
             query,
             "**⏰ Timeout! Operation cancelled.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+            ),
         )
     except Exception:
         return
@@ -406,7 +426,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
         if not _has_fsub_channel(client, channel_id):
             return await ask_channel_info.reply(
                 "**✗ This channel ID is not in the Force Sub list!**",
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+                reply_markup=InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+                ),
             )
 
         if channel_id in client.req_channels:
@@ -425,7 +447,9 @@ async def rm_fsub(client: Client, query: CallbackQuery):
     except Exception as e:
         return await ask_channel_info.reply(
             f"**✗ Error:** `{e}`",
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="fsub")]]
+            ),
         )
 
 
