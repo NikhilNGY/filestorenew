@@ -11,8 +11,8 @@ from pyrogram.types import (
     Message,
 )
 
-from config import API_HASH, API_ID, OWNER_ID
-from plugins.start import is_admin, resolve_and_deliver_files
+from config import API_HASH, API_ID
+from plugins.start import is_admin, resolve_and_deliver_files, safe_edit_or_send
 
 # ================================================================================= #
 #                     WORKER BOT LIFECYCLE & LOAD BALANCER                          #
@@ -200,10 +200,14 @@ async def get_multi_bot_panel_data(client: Client):
                 ),
             ],
             [
-                InlineKeyboardButton("Add bot", callback_data="mb_add_bot"),
-                InlineKeyboardButton("Rem Bot", callback_data="mb_rem_bot"),
+                InlineKeyboardButton("➕ Add bot", callback_data="mb_add_bot"),
+                InlineKeyboardButton("➖ Rem Bot", callback_data="mb_rem_bot"),
             ],
-            [InlineKeyboardButton("Bot list", callback_data="mb_list_bots")],
+            [
+                InlineKeyboardButton(
+                    f"📋 Bot list ({len(worker_bots)})", callback_data="mb_list_bots"
+                )
+            ],
             [InlineKeyboardButton("‹ ʙᴀᴄᴋ ᴛᴏ sᴇᴛᴛɪɴɢs", callback_data="settings")],
         ]
     )
@@ -224,8 +228,9 @@ async def bots_menu_cb(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    await query.answer()
     text, markup = await get_multi_bot_panel_data(client)
-    await query.message.edit_text(text, reply_markup=markup)
+    await safe_edit_or_send(client, query, text, markup)
 
 
 @Client.on_callback_query(filters.regex("^(toggle_mb_status|toggle_ar_status)$"))
@@ -246,7 +251,8 @@ async def toggle_bot_settings(client: Client, query: CallbackQuery):
         await client.mongodb.set_setting("auto_rotate_enabled", new_val)
         await query.answer(f"Auto-Rotate is now {'ON 🟢' if new_val else 'OFF 🔴'}")
 
-    await bots_menu_cb(client, query)
+    text, markup = await get_multi_bot_panel_data(client)
+    await safe_edit_or_send(client, query, text, markup)
 
 
 @Client.on_callback_query(filters.regex("^mb_add_bot$"))
@@ -255,11 +261,13 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
     await query.answer()
-    await query.message.edit_text(
+    await safe_edit_or_send(
+        client,
+        query,
         "<blockquote>**➕ ᴀᴅᴅ ᴡᴏʀᴋᴇʀ ʙᴏᴛ (ᴜɴʟɪᴍɪᴛᴇᴅ)**</blockquote>\n\n"
         "Send one or multiple **Bot Tokens** (one per line) from @BotFather in the next 60 seconds.\n\n"
         "⚠️ **Important:** Make sure each worker bot is already added as an **Admin** in your DB Channel(s)!",
-        reply_markup=InlineKeyboardMarkup(
+        InlineKeyboardMarkup(
             [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="bots_menu")]]
         ),
     )
@@ -270,9 +278,11 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
         )
         tokens = [line.strip() for line in res.text.splitlines() if line.strip()]
         if not tokens:
-            return await query.message.edit_text(
+            return await safe_edit_or_send(
+                client,
+                query,
                 "**❌ No valid tokens provided!**",
-                reply_markup=InlineKeyboardMarkup(
+                InlineKeyboardMarkup(
                     [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
                 ),
             )
@@ -317,9 +327,11 @@ async def mb_add_bot_cb(client: Client, query: CallbackQuery):
             ),
         )
     except ListenerTimeout:
-        await query.message.edit_text(
+        await safe_edit_or_send(
+            client,
+            query,
             "**⏰ Timeout! Please try again.**",
-            reply_markup=InlineKeyboardMarkup(
+            InlineKeyboardMarkup(
                 [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="bots_menu")]]
             ),
         )
@@ -352,6 +364,7 @@ async def list_worker_bots(client: Client, query: CallbackQuery):
     if not worker_bots:
         return await query.answer("No worker bots connected yet!", show_alert=True)
 
+    await query.answer()
     buttons = []
     for bot in worker_bots:
         bot_id = bot["bot_id"]
@@ -378,9 +391,11 @@ async def list_worker_bots(client: Client, query: CallbackQuery):
     buttons.append([InlineKeyboardButton("Remove All bot", callback_data="mb_rem_all")])
     buttons.append([InlineKeyboardButton("🔙 Back", callback_data="bots_menu")])
 
-    await query.message.edit_text(
-        f"📋 **Connected Worker Bots ({len(worker_bots)}):**",
-        reply_markup=InlineKeyboardMarkup(buttons),
+    await safe_edit_or_send(
+        client,
+        query,
+        f"📋 **Connected Worker Bots ({len(worker_bots)}):**\n\nClick **Remove bot** next to any bot to disconnect and delete it:",
+        InlineKeyboardMarkup(buttons),
     )
 
 
@@ -405,7 +420,8 @@ async def mb_rem_specific_cb(client: Client, query: CallbackQuery):
     if remaining:
         await list_worker_bots(client, query)
     else:
-        await bots_menu_cb(client, query)
+        text, markup = await get_multi_bot_panel_data(client)
+        await safe_edit_or_send(client, query, text, markup)
 
 
 @Client.on_callback_query(filters.regex("^mb_rem_all$"))
@@ -423,7 +439,8 @@ async def mb_rem_all_cb(client: Client, query: CallbackQuery):
 
     await client.mongodb.clear_all_worker_bots()
     await query.answer("All worker bots removed! ✅", show_alert=True)
-    await bots_menu_cb(client, query)
+    text, markup = await get_multi_bot_panel_data(client)
+    await safe_edit_or_send(client, query, text, markup)
 
 
 # ================================================================================= #
@@ -486,8 +503,9 @@ async def otherbots_menu_cb(client: Client, query: CallbackQuery):
     if not is_admin(client, query.from_user.id):
         return await query.answer("✗ ᴏɴʟʏ ᴀᴅᴍɪɴs ᴄᴀɴ ᴜsᴇ ᴛʜɪs!", show_alert=True)
 
+    await query.answer()
     text, markup = await get_otherbots_panel_data(client)
-    await query.message.edit_text(text, reply_markup=markup)
+    await safe_edit_or_send(client, query, text, markup)
 
 
 @Client.on_callback_query(filters.regex(r"^ob_(set|rem)_(txt|img|btn)$"))
@@ -508,7 +526,8 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
             )
 
         await query.answer("Removed successfully! ✅")
-        return await otherbots_menu_cb(client, query)
+        text, markup = await get_otherbots_panel_data(client)
+        return await safe_edit_or_send(client, query, text, markup)
 
     await query.answer()
     prompt_msg = "Send the new value within 60 seconds:"
@@ -520,9 +539,11 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
     elif target == "img":
         prompt_msg = "Send a direct image URL (`https://...`) or upload a Photo within 60 seconds:"
 
-    await query.message.edit_text(
+    await safe_edit_or_send(
+        client,
+        query,
         prompt_msg,
-        reply_markup=InlineKeyboardMarkup(
+        InlineKeyboardMarkup(
             [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="otherbots_menu")]]
         ),
     )
@@ -549,9 +570,11 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
                     {"image": res.text.strip()}
                 )
             else:
-                return await query.message.edit_text(
+                return await safe_edit_or_send(
+                    client,
+                    query,
                     "**❌ Invalid image or link!**",
-                    reply_markup=InlineKeyboardMarkup(
+                    InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
@@ -572,9 +595,11 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
                     {"button_name": name.strip(), "button_url": url.strip()}
                 )
             else:
-                return await query.message.edit_text(
+                return await safe_edit_or_send(
+                    client,
+                    query,
                     "**❌ Invalid format! Must include `|` separator.**",
-                    reply_markup=InlineKeyboardMarkup(
+                    InlineKeyboardMarkup(
                         [
                             [
                                 InlineKeyboardButton(
@@ -585,11 +610,14 @@ async def handle_otherbots_settings(client: Client, query: CallbackQuery):
                     ),
                 )
 
-        await otherbots_menu_cb(client, query)
+        text, markup = await get_otherbots_panel_data(client)
+        await safe_edit_or_send(client, query, text, markup)
     except ListenerTimeout:
-        await query.message.edit_text(
+        await safe_edit_or_send(
+            client,
+            query,
             "**⏰ Timeout! Try again.**",
-            reply_markup=InlineKeyboardMarkup(
+            InlineKeyboardMarkup(
                 [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="otherbots_menu")]]
             ),
         )
