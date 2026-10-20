@@ -1,13 +1,11 @@
 from pyrogram import Client, filters
 from pyrogram.errors.pyromod import ListenerTimeout
-from pyrogram.types import (
-    CallbackQuery,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-)
+from pyrogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
 
 
-async def _safe_render(client: Client, query: CallbackQuery, text: str, markup: InlineKeyboardMarkup):
+async def _safe_render(
+    client: Client, query: CallbackQuery, text: str, markup: InlineKeyboardMarkup
+):
     """Safely edits or sends the message so photo-to-text transitions never fail."""
     try:
         if query.message.photo:
@@ -71,9 +69,7 @@ async def texts(client: Client, query: CallbackQuery):
     await _safe_render(client, query, msg, reply_markup)
 
 
-async def update_text_field(
-    client: Client, query: CallbackQuery, key: str, label: str
-):
+async def update_text_field(client: Client, query: CallbackQuery, key: str, label: str):
     """Prompt the admin for a new text template and persist it in MongoDB."""
     await query.answer()
     await _safe_render(
@@ -82,7 +78,9 @@ async def update_text_field(
         f"<blockquote>**✦ Edit {label}:**</blockquote>\n"
         f"Send the new **{label}** text in the next 60 seconds (HTML & Markdown supported).\n"
         f"Send `0` to cancel!",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="texts")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="texts")]]
+        ),
     )
     try:
         res = await client.listen(
