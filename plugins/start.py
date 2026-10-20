@@ -813,7 +813,9 @@ async def settings_command(client: Client, message: Message):
                 InlineKeyboardButton("ᴅʙ ᴄʜᴀɴɴᴇʟꜱ", callback_data="db_channels"),
             ],
             [
-                InlineKeyboardButton("🗄️ ᴅᴀᴛᴀᴅʙ (ᴍᴜʟᴛɪ-ᴅʙ)", callback_data="datadb_menu"),
+                InlineKeyboardButton(
+                    "🗄️ ᴅᴀᴛᴀᴅʙ (ᴍᴜʟᴛɪ-ᴅʙ)", callback_data="datadb_menu"
+                ),
                 InlineKeyboardButton("🤖 ᴍᴜʟᴛɪ-ʙᴏᴛꜱ", callback_data="bots_menu"),
             ],
             [
@@ -843,7 +845,9 @@ async def settings_page_1(client: Client, query: CallbackQuery):
                 InlineKeyboardButton("ᴅʙ ᴄʜᴀɴɴᴇʟꜱ", callback_data="db_channels"),
             ],
             [
-                InlineKeyboardButton("🗄️ ᴅᴀᴛᴀᴅʙ (ᴍᴜʟᴛɪ-ᴅʙ)", callback_data="datadb_menu"),
+                InlineKeyboardButton(
+                    "🗄️ ᴅᴀᴛᴀᴅʙ (ᴍᴜʟᴛɪ-ᴅʙ)", callback_data="datadb_menu"
+                ),
                 InlineKeyboardButton("🤖 ᴍᴜʟᴛɪ-ʙᴏᴛꜱ", callback_data="bots_menu"),
             ],
             [
@@ -870,7 +874,9 @@ async def settings_page_2(client: Client, query: CallbackQuery):
         [
             [
                 InlineKeyboardButton("ᴘʀᴏᴛᴇᴄᴛ ᴄᴏɴᴛᴇɴᴛ", callback_data="protect"),
-                InlineKeyboardButton("ᴅɪsᴀʙʟᴇ ʙᴜᴛᴛᴏɴ", callback_data="toggle_disable_btn"),
+                InlineKeyboardButton(
+                    "ᴅɪsᴀʙʟᴇ ʙᴜᴛᴛᴏɴ", callback_data="toggle_disable_btn"
+                ),
             ],
             [
                 InlineKeyboardButton("ᴘʜᴏᴛᴏs", callback_data="photos"),
@@ -878,7 +884,9 @@ async def settings_page_2(client: Client, query: CallbackQuery):
             ],
             [
                 InlineKeyboardButton("🔗 sʜᴏʀᴛɴᴇʀ", callback_data="shortner"),
-                InlineKeyboardButton("⚙️ ᴏᴛʜᴇʀʙᴏᴛs ʀᴇᴘʟʏ", callback_data="otherbots_menu"),
+                InlineKeyboardButton(
+                    "⚙️ ᴏᴛʜᴇʀʙᴏᴛs ʀᴇᴘʟʏ", callback_data="otherbots_menu"
+                ),
             ],
             [
                 InlineKeyboardButton("‹ ᴘʀᴇᴠ", callback_data="settings"),
@@ -932,8 +940,12 @@ __ᴜsᴇ ᴛʜᴇ ᴀᴘᴘʀᴏᴘʀɪᴀᴛᴇ ʙᴜᴛᴛᴏɴ ʙᴇʟᴏᴡ
     reply_markup = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="add_db_channel"),
-                InlineKeyboardButton("›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="rm_db_channel"),
+                InlineKeyboardButton(
+                    "›› ᴀᴅᴅ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="add_db_channel"
+                ),
+                InlineKeyboardButton(
+                    "›› ʀᴇᴍᴏᴠᴇ ᴅʙ ᴄʜᴀɴɴᴇʟ", callback_data="rm_db_channel"
+                ),
             ],
             [
                 InlineKeyboardButton("›› sᴇᴛ ᴘʀɪᴍᴀʀʏ", callback_data="set_primary_db"),
@@ -963,7 +975,9 @@ __sᴇɴᴅ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ɪᴅ (ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢ
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("‹ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("‹ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1035,7 +1049,9 @@ __sᴇɴᴅ ᴛʜᴇ ᴄʜᴀɴɴᴇʟ ɪᴅ (ɴᴇɢᴀᴛɪᴠᴇ ɪɴᴛᴇɢ
             client,
             query,
             "**✗ ᴛɪᴍᴇᴏᴜᴛ! ᴘʟᴇᴀsᴇ ᴛʀʏ ᴀɢᴀɪɴ.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("‹ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("‹ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
 
@@ -1050,7 +1066,9 @@ async def rm_db_channel(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ No database channels to remove!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
     msg = "<blockquote>**Remove Database Channel:**</blockquote>\n**Available Channels:**\n"
@@ -1064,7 +1082,9 @@ async def rm_db_channel(client: Client, query: CallbackQuery):
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1115,7 +1135,9 @@ async def rm_db_channel(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ Timeout! Please try again.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
 
@@ -1130,7 +1152,9 @@ async def set_primary_db(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ No database channels available!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
     msg = "<blockquote>**Set Primary Database Channel:**</blockquote>\n**Available Channels:**\n"
@@ -1148,7 +1172,9 @@ async def set_primary_db(client: Client, query: CallbackQuery):
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1192,7 +1218,9 @@ async def set_primary_db(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ Timeout! Please try again.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
 
@@ -1207,7 +1235,9 @@ async def toggle_db_status(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ No database channels available!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
     msg = (
@@ -1223,7 +1253,9 @@ async def toggle_db_status(client: Client, query: CallbackQuery):
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="db_channels")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1264,7 +1296,9 @@ async def toggle_db_status(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ Timeout! Please try again.**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="db_channels")]]
+            ),
         )
 
 
@@ -1309,7 +1343,9 @@ __Enter a new integer value for the auto delete timer (in seconds). Keep `0` to 
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="settings")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="settings")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1347,7 +1383,9 @@ __Enter a new integer value for the auto delete timer (in seconds). Keep `0` to 
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="settings")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="settings")]]
+            ),
         )
 
 
@@ -1449,7 +1487,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1491,7 +1531,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]
+            ),
         )
 
 
@@ -1509,7 +1551,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1549,7 +1593,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]
+            ),
         )
 
 
@@ -1567,7 +1613,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
         client,
         query,
         msg,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="photos")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1607,7 +1655,9 @@ __Enter a new link (starting with http:// or https://) or send the photo directl
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="photos")]]
+            ),
         )
 
 
@@ -1680,7 +1730,9 @@ async def edit_text_settings(client: Client, query: CallbackQuery):
         client,
         query,
         f"<blockquote>**Edit {label}:**</blockquote>\nSend the new text in the next 60 seconds (Send `0` to cancel):",
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="texts")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="texts")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1703,7 +1755,9 @@ async def edit_text_settings(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="texts")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="texts")]]
+            ),
         )
 
 
@@ -1784,7 +1838,9 @@ async def shortner_set_values_cb(client: Client, query: CallbackQuery):
         client,
         query,
         prompt_text,
-        InlineKeyboardMarkup([[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="shortner")]]),
+        InlineKeyboardMarkup(
+            [[InlineKeyboardButton("◂ ᴄᴀɴᴄᴇʟ", callback_data="shortner")]]
+        ),
     )
     try:
         res = await client.listen(
@@ -1804,5 +1860,7 @@ async def shortner_set_values_cb(client: Client, query: CallbackQuery):
             client,
             query,
             "**❌ Timeout, try again!**",
-            InlineKeyboardMarkup([[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="shortner")]]),
+            InlineKeyboardMarkup(
+                [[InlineKeyboardButton("◂ ʙᴀᴄᴋ", callback_data="shortner")]]
+            ),
         )
